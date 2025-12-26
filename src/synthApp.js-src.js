@@ -11,7 +11,7 @@ export const forceBundle = true;
 // const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
 
 // Use the correct protocol based on your site's URL
-const WS_URL = "ws://localhost:3001"
+const WS_URL = "ws://127.0.0.1:3001"
 
 import { saveDocument, loadDocument, deleteDocument } from '../utilities/indexedDB.js';
 
@@ -34,23 +34,7 @@ let sharedSequencerState = null
 
 // * new automerge implementation
 
-let currentBranch = null
-let onChange; // my custom automerge callback for changes made to the doc
 
-let automergeDocuments = {
-    newClone: false,
-    newMerge: false,
-    current: {
-        doc: null
-    },
-    otherDocs: {
-
-    }
-}
-let docUpdated = false
-
-let previousHash;
-let patchHistory;
 
 
 let collaborationSettings = {
@@ -81,12 +65,6 @@ document.addEventListener("DOMContentLoaded", function () {
     //* AUTOMERGE IMPLEMENTATION
     async function startAutomerge() {
 
-    
-
-
-        // * synth changes document
-        // Unique identifier for the document
-        docID = 'forkingPathsDoc'; 
         // if patchHistory doesn't contain a document, create a new one
         if (!patchHistory.docs[patchHistory.head.branch]) {
 
@@ -139,6 +117,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 // });
             }
 
+            //!
         } else {
 
             // patchHistory does contain at least one document, so grab whichever is the one that was last looked at

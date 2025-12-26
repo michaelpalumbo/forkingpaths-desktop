@@ -15,8 +15,13 @@
     "@automerge/automerge": "^3.2.1",
     "base64-js": "^1.5.1",
     "indexeddbshim": "^16.1.0",
+    "marked": "^17.0.1",
     "sqlite3": "^5.1.7",
+    "tone": "^15.1.22",
     "username": "^7.0.0",
-    "uuidv7": "^1.1.0"
+    "uuidv7": "^1.1.0",
+    "vite-plugin-static-copy": "^3.1.4",
+    "vite-plugin-wasm": "^3.5.0",
+    "webmidi": "^3.1.14"
   }
 }
