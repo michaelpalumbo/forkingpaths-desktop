@@ -1112,23 +1112,24 @@ document.addEventListener("DOMContentLoaded", async () => {
                     modifyGestureParamAssign() 
 
                 break
+                // this receives any history and graph updates from the server
                 case 'historyGraphRenderUpdate':
-                    console.log('historyGraph', msg.data)
+              
                     
                     historyGraphNodesArray = msg.data.elements.nodes;
 
                     patchHistory = msg.history
-                    console.log(patchHistory)
+      
                     setGraphFromHistoryRenderer(msg);
                     graphJSONstore = msg;
 
                     
                 break;
 
-                case 'panToBranch':
+                // case 'panToBranch':
                     
-                    panToBranch(event.data.data)
-                break
+                //     panToBranch(event.data.data)
+                // break
 
                 case 'newPatchHistory':
 
@@ -4083,7 +4084,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // pan to new/selected branch
     function panToBranch(node) {
-        console.log('snared')
         if(!node){
             console.warn('no node')
             return
@@ -4103,8 +4103,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         position.x < extent.x1 || position.x > extent.x2 ||
         position.y < extent.y1 || position.y > extent.y2;
         
-        console.log('is outside viewport:', isOutsideViewport)
-
         if (isOutsideViewport) {
             
             // Pan to the node
