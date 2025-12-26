@@ -2842,7 +2842,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Show and move the overlay
     historyDAG_cy.on('mouseover', 'node', function(evt) {
         const data = evt.target.data();
-  
+        console.log(data)
         let overlayString
         if(!data.label){
             // dealing with a node that doesn't have the info we need yet

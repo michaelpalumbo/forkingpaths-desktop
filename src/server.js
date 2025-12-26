@@ -547,7 +547,7 @@ function sendSyncMessage() {
 
 }
 
-function createNewPatchHistory(){
+function createNewPatchHistory(data = {}){
 
 
     // delete the document in the indexedDB instance
@@ -598,9 +598,9 @@ function createNewPatchHistory(){
     // Apply initial changes to the new document
     currentBranch = Automerge.change(currentBranch, amMsg, (currentBranch) => {
         currentBranch.title = config.patchHistory.firstBranchName;
-        currentBranch.parameterSpace = {},
+        currentBranch.parameterSpace = data,
         currentBranch.openSoundControl = {}
-    }, onChange, `new history`);
+    }, onChange, `blank_patch`);
     
 
     
@@ -1154,18 +1154,21 @@ wss.on('connection', (ws, req) => {
                 // console.log(msg.data)
                 // in this case, FP is receiving the full state of the OSC namespace in Max including the values. 
                 // i could be wrong, but i think this would always be the first changeNode in the history graph. maybe it needs to be a new changeNode type?
-                currentBranch = applyChange(currentBranch, (currentBranch) => {
-                    currentBranch.parameterSpace = msg.data
-                    // set the change type
-                    currentBranch.changeNode = {
-                        msg: 'paramUpdate',
-                        param: "parameterSpace",
-                        parent: "none",
-                        value: 'fullState'
-                    }
-                }, onChange, `paramUpdate parameter state full initialization $external`);
 
-                // console.log(currentBranch.parameterSpace)
+                createNewPatchHistory(msg.data)
+
+                // currentBranch = applyChange(currentBranch, (currentBranch) => {
+                //     currentBranch.parameterSpace = msg.data
+                //     // set the change type
+                //     currentBranch.changeNode = {
+                //         msg: 'paramUpdate',
+                //         param: "parameterSpace",
+                //         parent: "none",
+                //         value: 'fullState'
+                //     }
+                // }, onChange, `paramUpdate parameter state full initialization $external`);
+
+
                 
             break
 
@@ -1192,7 +1195,17 @@ wss.on('connection', (ws, req) => {
 
             case 'newPatchHistory':
                 
-                createNewPatchHistory()
+            if(maxMspClient){
+                // send message to max client to get cached state
+                maxMspClient.send(JSON.stringify({
+                    cmd: 'getParamStates'
+                }))
+            } else {
+                console.log('\n\ntodo: in this case, the maxClient isnt connected/open yet\nso, need to just clear the patch history AND inform history client that no external clients are connected yet')
+            }
+            
+
+            
             //todo: get the namespace state from max patch then send here:
                     //             wss.clients.forEach((client) => {
                     //     client.send(JSON.stringify({
