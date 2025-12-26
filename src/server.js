@@ -1086,7 +1086,7 @@ wss.on('connection', (ws, req) => {
                         parent: "none",
                         value: 'fullState'
                     }
-                }, onChange, `paramUpdate $external`);
+                }, onChange, `paramUpdate parameter state full initialization $external`);
 
                 // console.log(currentBranch.parameterSpace)
                 
@@ -1149,12 +1149,6 @@ wss.on('connection', (ws, req) => {
                 
                 patchHistoryClient = ws
                 console.log('New Connection: patchHistoryClient')
-                // sendMsgToHistoryApp({
-                //     appID: 'forkingPathsMain',
-                //     cmd: 'reDrawHistoryGraph',
-                //     data: patchHistory,
-                //     // room: room
-                // })
 
                 updateHistoryGraph(ws, patchHistory, config.docHistoryGraphStyling)
                 // sendMsgToHistoryApp({
@@ -1408,12 +1402,14 @@ function updateHistoryGraph(ws, patchHistory, docHistoryGraphStyling){
     // Send the graph JSON  to the patchHistory window
     const graphJSON = historyDAG_cy.json();
 
-    wss.clients.forEach((client) =>{
-        client.send(JSON.stringify({
+    if(patchHistoryClient){
+        patchHistoryClient.send(JSON.stringify({
             cmd: "historyGraphRenderUpdate", 
             data: graphJSON
         }))
-    })
+    }
+
+
     
 }
 

@@ -86,6 +86,7 @@ function buildHistoryGraph(patchHistory, existingHistoryNodeIDs, docHistoryGraph
             let parent = []
             let sequencerTable 
             let mergeData
+            let paramData
             // we now store the parent module data in the change message, so extract that so it doesn't appear as the label, and place it in the 'parent' prop
             // check if its a $PARENT or $PARENTS condition
             if(item.msg.includes('$PARENT ')){
@@ -121,6 +122,10 @@ function buildHistoryGraph(patchHistory, existingHistoryNodeIDs, docHistoryGraph
 
             else if(item.msg.includes('$external')){
                 label = item.msg
+                console.log(item)
+                paramData = {
+
+                }
                 // mergeData = {
                 //     parents: item.parent,
                 //     nodes: item.nodes
