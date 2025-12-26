@@ -1092,13 +1092,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 cmd: 'historyWindowReady'
             });
 
-            // request current sequencer state
-            // console.log('room', room)
-            // ws.send(JSON.stringify({
-            //     cmd: 'getSequencerState',
-            //     room: room
-            // }))
-
         };
 
         ws.onmessage = (event) => {
@@ -1109,20 +1102,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                     let historyNode = historyDAG_cy.getElementById(event.data.data)
                     
                     highlightNode(historyNode)
+                    console.log('highlight')
                 break
 
+                // this exists as a fallback on the client if in case the graph fails to render
                 case 'reDrawHistoryGraph':
-
+                
                     patchHistory = msg
-
                     modifyGestureParamAssign() 
-
 
                 break
                 case 'historyGraphRenderUpdate':
                     console.log('historyGraph', msg.data)
                     
                     historyGraphNodesArray = msg.data.elements.nodes;
+
+                    patchHistory = msg.history
+                    console.log(patchHistory)
                     setGraphFromHistoryRenderer(msg);
                     graphJSONstore = msg;
 
@@ -1543,6 +1539,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         // selectedNode = latestNode.data()
 
         if(!patchHistory.head){
+            console.log('request current patchHistory', patchHistory)
             sendToMainApp({
                 cmd: 'requestCurrentPatchHistory',
             })
@@ -4086,7 +4083,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // pan to new/selected branch
     function panToBranch(node) {
-        
+        console.log('snared')
         if(!node){
             console.warn('no node')
             return
@@ -4105,8 +4102,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         const isOutsideViewport =
         position.x < extent.x1 || position.x > extent.x2 ||
         position.y < extent.y1 || position.y > extent.y2;
+        
+        console.log('is outside viewport:', isOutsideViewport)
 
         if (isOutsideViewport) {
+            
             // Pan to the node
             historyDAG_cy.pan({
                 x: -position.x * zoom + (historyDAG_cy.width() /2), // Adjust for viewport center

@@ -146,8 +146,9 @@ async function startAutomerge() {
             
             previousHash = patchHistory.head.hash
             
+            patchHistoryIsDirty = true
             // send doc to history app
-            reDrawHistoryGraph()
+            updateHistoryGraph(patchHistoryClient, patchHistory, config.docHistoryGraphStyling)
 
         }, 1000);
     }
@@ -306,9 +307,9 @@ onChange = () => {
     // set docUpdated so that indexedDB will save it
     docUpdated = true
 
-    
+    patchHistoryIsDirty = true
     // update the historyGraph
-    reDrawHistoryGraph()
+    updateHistoryGraph(patchHistoryClient, patchHistory, config.docHistoryGraphStyling)
 
 
 };
@@ -540,8 +541,10 @@ function createNewPatchHistory(){
         
     docUpdated = true
     previousHash = patchHistory.head.hash
+
+    patchHistoryIsDirty = true
     // send doc to history app
-    reDrawHistoryGraph()
+    updateHistoryGraph(patchHistoryClient, patchHistory, config.docHistoryGraphStyling)
 
     // get a binary from the new patchHistory
     const fullBinary = Automerge.save(patchHistory);
@@ -561,24 +564,6 @@ function clearHistoryGraph(){
         existingHistoryNodeIDs.clear()
     }
     historyDAG_cy.layout(graphLayouts[graphStyle]).run()
-}
-
-function reDrawHistoryGraph(){
-    patchHistoryIsDirty = true
-
-    // instead of sending to the history app...:
-    // wss.clients.forEach((client) => {
-    //     client.send(JSON.stringify({
-    //         appID: 'forkingPathsMain',
-    //         cmd: 'reDrawHistoryGraph',
-    //         data: patchHistory
-                
-    //     }))
-    // });
-
-    // we should now pass this to the graph renderer, and return the result and pass THAT to the history app
-    updateHistoryGraph(patchHistoryClient, patchHistory, config.docHistoryGraphStyling)
-
 }
 
 function init(){
@@ -1000,7 +985,15 @@ wss.on('connection', (ws, req) => {
         let msg = JSON.parse(message)
         
         switch(msg.cmd){
+            case 'historyWindowReady':
+                
+                patchHistoryClient = ws
+                console.log('New Connection: patchHistoryClient')
 
+                // send patch history to client
+                
+                updateHistoryGraph(patchHistoryClient, patchHistory, config.docHistoryGraphStyling)
+            break
 
             case 'maxStateRecall':
 
@@ -1145,45 +1138,7 @@ wss.on('connection', (ws, req) => {
 
             break;
 
-            case 'historyWindowReady':
-                
-                patchHistoryClient = ws
-                console.log('New Connection: patchHistoryClient')
-
-                updateHistoryGraph(ws, patchHistory, config.docHistoryGraphStyling)
-                // sendMsgToHistoryApp({
-                //     appID: 'forkingPathsMain',
-                //     cmd: 'setRoom',
-                //     room: 1
-                // })
-                // // get room info (which includes the sequencer state of the remote peer)
-                // ws.send(JSON.stringify({
-                //     cmd: 'getSequencerState'
-                // }))
-                
-                // sendMsgToHistoryApp({
-                //     appID: 'forkingPathsMain',
-                //     cmd: 'syncPeerSequencer',
-                //     action: 'syncSequencerOnNewPeerConnection',
-                //     payload: sharedSequencerState
-                // })
-                
-                // if we have a remote peer and that peer has a sequencer state, send it to the local history window
-                // if(sharedSequencerState){
-
-                // sendMsgToHistoryApp({
-                //     appID: 'forkingPathsMain',
-                //     cmd: 'sequencerModificationCheck',
-                //     // data: {
-                //     //     action: 'syncSequencerOnNewPeerConnection',
-                //     //     payload: sharedSequencerState
-                //     // }
- 
-                // })
-            // }
-                
-                
-            break
+            
 
             // case 'updateGraph':
             //     // patchHistory = msg.patchHistory
@@ -1274,8 +1229,8 @@ wss.on('connection', (ws, req) => {
                 }))
             break
 
-            // case "externalParamUpdate":
-
+            
+            // this exists as a fallback on the client if in case the graph fails to render
             case 'requestCurrentPatchHistory':
                 sendMsgToHistoryApp({
                     appID: 'forkingPathsMain',
@@ -1405,7 +1360,8 @@ function updateHistoryGraph(ws, patchHistory, docHistoryGraphStyling){
     if(patchHistoryClient){
         patchHistoryClient.send(JSON.stringify({
             cmd: "historyGraphRenderUpdate", 
-            data: graphJSON
+            data: graphJSON,
+            history: patchHistory
         }))
     }
 
