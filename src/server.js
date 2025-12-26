@@ -2,6 +2,7 @@
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import buildHistoryGraph from './buildHistoryGraph.js';
+import { GestureDetector } from './scripts/GestureDetector.js';
 
 import fs from 'node:fs';
 import path from 'path';
@@ -129,8 +130,6 @@ async function startAutomerge() {
     }
 
     syncState = Automerge.initSyncState()
-
-
 
     // if patchHistory doesn't contain a document, create a new one
     if (!patchHistory.docs[patchHistory.head.branch]) {
@@ -1090,65 +1089,58 @@ wss.on('connection', (ws, req) => {
 
             break
 
-                   //? keep this for now in case we can reuse it for other oscQuery-enabled programs
-                case 'namespaceState':
-                    
-                    // in this case, FP is receiving the full state of the OSC namespace in Max including the values. 
-                    // i could be wrong, but i think this would always be the first changeNode in the history graph. maybe it needs to be a new changeNode type?
-                    currentBranch = applyChange(currentBranch, (currentBranch) => {
-                        currentBranch.openSoundControl = msg.data
-                        // set the change type
-                        currentBranch.changeNode = {
-                            msg: 'paramUpdate',
-                            param: "namespace",
-                            parent: "none",
-                            value: 'placeholder'
-                        }
-                    }, onChange, `paramUpdate namespace = placeholder`);
-                break
-
-                //? keep this for now in case we can reuse it for other oscQuery-enabled programs
-                case 'OSCmsg':
-                   
-                    let AP = msg.data.address
-                    let TTS = msg.data.args
-                    
-                    currentBranch = applyChange(currentBranch, (currentBranch) => {
-                        if(!currentBranch.openSoundControl){
-                            currentBranch.openSoundControl = {}
-                        }
-                        if(!currentBranch.openSoundControl[AP]){
-                            currentBranch.openSoundControl[AP] = []
-                        }
-                        currentBranch.openSoundControl[AP] = TTS
-                        // set the change type
-                        currentBranch.changeNode = {
-                            msg: 'paramUpdate',
-                            param: AP,
-                            parent: "none",
-                            value: TTS
-                        }
-                    }, onChange, `paramUpdate ${AP} = ${TTS}`);
-                break;
-            case 'maxParamUpdate':
+            //? keep this for now in case we can reuse it for other oscQuery-enabled programs
+            case 'namespaceState':
                 
+                // in this case, FP is receiving the full state of the OSC namespace in Max including the values. 
+                // i could be wrong, but i think this would always be the first changeNode in the history graph. maybe it needs to be a new changeNode type?
                 currentBranch = applyChange(currentBranch, (currentBranch) => {
-                    if(!currentBranch.parameterSpace){
-                        currentBranch.parameterSpace = {}
-                    }
-                    if(!currentBranch.parameterSpace[msg.param]){
-                        currentBranch.parameterSpace[msg.param] = []
-                    }
-                    currentBranch.parameterSpace[msg.param] = msg.value
+                    currentBranch.openSoundControl = msg.data
                     // set the change type
                     currentBranch.changeNode = {
                         msg: 'paramUpdate',
-                        param: msg.param,
+                        param: "namespace",
                         parent: "none",
-                        value: msg.value
+                        value: 'placeholder'
                     }
-                }, onChange, `paramUpdate ${msg.param} = ${msg.value} $external`);
+                }, onChange, `paramUpdate namespace = placeholder`);
+            break
 
+            //? keep this for now in case we can reuse it for other oscQuery-enabled programs
+            case 'OSCmsg':
+                
+                let AP = msg.data.address
+                let TTS = msg.data.args
+                
+                currentBranch = applyChange(currentBranch, (currentBranch) => {
+                    if(!currentBranch.openSoundControl){
+                        currentBranch.openSoundControl = {}
+                    }
+                    if(!currentBranch.openSoundControl[AP]){
+                        currentBranch.openSoundControl[AP] = []
+                    }
+                    currentBranch.openSoundControl[AP] = TTS
+                    // set the change type
+                    currentBranch.changeNode = {
+                        msg: 'paramUpdate',
+                        param: AP,
+                        parent: "none",
+                        value: TTS
+                    }
+                }, onChange, `paramUpdate ${AP} = ${TTS}`);
+            break;
+            case 'maxParamUpdate':                 
+        
+                if (!detectors[msg.param]) {
+                    detectors[msg.param] = new GestureDetector(msg.param, handleFinishedSweep);
+                }
+            
+                // 2. Route the data to the correct detector
+                if (msg.value !== 'endGesture') {
+                    detectors[msg.param].input(msg.value);
+                } else {
+                    detectors[msg.param].stop();
+                }
                 
 
             break
@@ -1532,3 +1524,65 @@ function updateHistoryGraph(){
     function savePatchHistory(){
         fs.writeFileSync(path.join(__dirname, 'storage/patchHistoryStore.forkingpaths'), Automerge.save(patchHistory))
     }
+
+    const detectors = {};
+
+    // 1. Define the handler for the completed gesture
+    const handleFinishedSweep = (paramName, gestureData) => {
+     
+        if(gestureData.length === 1){
+            // store a paramUpdate
+            let paramValue = gestureData[0]
+            
+            currentBranch = applyChange(currentBranch, (currentBranch) => {
+                if(!currentBranch.parameterSpace){
+                    currentBranch.parameterSpace = {}
+                }
+                if(!currentBranch.parameterSpace[paramName]){
+                    currentBranch.parameterSpace[paramName] = []
+                }
+                currentBranch.parameterSpace[paramName] = paramValue
+                // set the change type
+                currentBranch.changeNode = {
+                    msg: 'paramUpdate',
+                    param: paramName,
+                    parent: "none",
+                    value: paramValue
+                }
+            }, onChange, `paramUpdate ${paramName} = ${paramValue} $external`);
+            
+            
+        } else {2
+            // store a gesture!
+
+            // Extract values and timestamps into separate arrays
+            const values = gestureData.map(item => item.val);
+            const timestamps = gestureData.map(item => item.time);
+
+            currentBranch = applyChange(currentBranch, (currentBranch) => {
+            
+                // set the change type
+                currentBranch.changeNode = {
+                    msg: 'gesture',
+                    param: paramName,
+                    parent: 'todo',
+                    values: values,
+                    timestamps: timestamps
+                }
+            }, onChange, `gesture ${paramName} $external`);
+            
+        }
+      
+
+        // // Update your Automerge doc as a single atomic transaction
+        // patchHistory = Automerge.change(patchHistory, (doc) => {
+        //     // You can store the whole array, or use it to calculate 
+        //     // the final state in your parameterSpace
+        //     doc.parameterSpace.lastGesture = gestureData;
+        // });
+    };
+
+    // Create the detector
+    // const knobDetector = new GestureDetector(handleFinishedSweep);
+
+
