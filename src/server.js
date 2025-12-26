@@ -344,6 +344,7 @@ async function loadVersion(targetHash, branch, fromPeer, fromPeerSequencer) {
     // recall max patch state
     maxStateRecall(historicalView.parameterSpace)
 
+    
     // ⬇️ Optional sync logic for collaboration mode
     // const versionSyncMode = localStorage.getItem('syncMode') || 'shared';
 
@@ -1351,6 +1352,23 @@ wss.on('connection', (ws, req) => {
                         
                 })
             break
+
+            case 'playGesture':
+                // const node = msg.data
+                // const data = {
+                //     parent: node.parent,
+                //     param: node.param, 
+                //     value: node.value,
+                //     kind: node.kind
+                // }
+                // updateSynthWorklet('paramChange', data)
+
+                // todo: call maxGestureRecall()
+
+                console.log(msg.data)
+                maxGestureRecall(msg.data)
+
+            break
             //     // ws.send(message)
 
             //     wss.clients.forEach((client) => {
@@ -1541,9 +1559,17 @@ function updateHistoryGraph(){
     }
 
     function maxStateRecall(paramState){
+   
         maxMspClient.send(JSON.stringify({
             cmd: 'maxStateRecall',
             data: paramState
+        }))
+    }
+
+    function maxGestureRecall(gestureData){
+        maxMspClient.send(JSON.stringify({
+            cmd: 'gesturePlayBack',
+            data: gestureData
         }))
     }
 
@@ -1558,7 +1584,7 @@ function updateHistoryGraph(){
      
         if(gestureData.length === 1){
             // store a paramUpdate
-            let paramValue = gestureData[0]
+            let paramValue = gestureData[0].val
             
             currentBranch = applyChange(currentBranch, (currentBranch) => {
                 if(!currentBranch.parameterSpace){
