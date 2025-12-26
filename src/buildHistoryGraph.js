@@ -122,7 +122,7 @@ function buildHistoryGraph(patchHistory, existingHistoryNodeIDs, docHistoryGraph
 
             else if(item.msg.includes('$external')){
                 label = item.msg
-                console.log(item)
+                
                 paramData = {
 
                 }
