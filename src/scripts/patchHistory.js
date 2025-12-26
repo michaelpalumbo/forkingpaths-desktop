@@ -1212,25 +1212,25 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 case 'getGestureData':
 
-                    const minVal = Math.min(...event.data.data.values);
-                    const maxVal = Math.max(...event.data.data.values);
+                    const minVal = Math.min(...msg.data.values);
+                    const maxVal = Math.max(...msg.data.values);
                     gestureData.range = maxVal - minVal
                     gestureData.min = minVal
                     gestureData.max = maxVal
                     // set the gesture length, start and end times
-                    gestureData.startTime = event.data.data.timestamps[0]
-                    gestureData.endTime = event.data.data.timestamps[event.data.data.timestamps.length - 1]
+                    gestureData.startTime = msg.data.timestamps[0]
+                    gestureData.endTime = msg.data.timestamps[msg.data.timestamps.length - 1]
                     gestureData.length = gestureData.endTime - gestureData.startTime
 
-                    gestureData.values = event.data.data.values
-                    gestureData.timestamps = event.data.data.timestamps
+                    gestureData.values = msg.data.values
+                    gestureData.timestamps = msg.data.timestamps
                     
                     // map the gesture values and timestamps to a new array of objects
-                    const gestureArray = event.data.data.values.map((value, i) => ({
+                    const gestureArray = msg.data.values.map((value, i) => ({
                         value: value,
-                        timestamp: event.data.data.timestamps[i],
-                        parent: event.data.data.parent,
-                        param: event.data.data.param,
+                        timestamp: msg.data.timestamps[i],
+                        parent: msg.data.parent,
+                        param: msg.data.param,
                         msg: 'gesture',
                         historyID: gestureData.historyID,
                         branch: gestureData.branch
@@ -1240,7 +1240,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     gestureData.gesturePoints = gestureArray
                     gestureData.linearGesturePoints = gestureArray
             
-                    let playback = event.data.recallGesture
+                    let playback = msg.recallGesture
                     createGestureGraph(gestureArray, playback)
                 break
 
@@ -2065,6 +2065,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Function to dynamically generate the graph
     function createGestureGraph(nodes, playback) {
 
+        console.log(patchHistory)
         // store nodes in case window is resized
         gestureNodes = nodes
         // clear the gestureData.nodes
@@ -2082,7 +2083,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
         // get the web audio node's spec
-        let parentWebAudioNode = modules.webAudioNodes[nodes[0].parent.split('_')[0]]
+        //? let parentWebAudioNode = modules.webAudioNodes[nodes[0].parent.split('_')[0]]
 
         
         const elements = [];
@@ -2137,6 +2138,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             // determine the y position of the node
             let valuePosition
             let y
+            /*
             // check if param is a knob or a menu
             if(parentWebAudioNode.parameters[node.param].values){
                 // param is a menu
@@ -2153,8 +2155,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 valuePosition = (node.value - gestureData.min) / gestureData.range;
                 y = viewportHeight - (valuePosition * viewportHeight); // Inverted y-coordinate
             }
+            */
             
-            
+            valuePosition = (node.value - gestureData.min) / gestureData.range;
+            y = viewportHeight - (valuePosition * viewportHeight); // Inverted y-coordinate
+
             
             const nodeColor = docHistoryGraphStyling.nodeColours['paramUpdate']
             // const index = node.data().label.indexOf(' ');
@@ -2195,7 +2200,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         let firstNodePosition
         let lastNodePosition
-
+        /* 
         if(parentWebAudioNode.parameters[nodes[0].param].values){
             // param is a menu
             let menuOptions = parentWebAudioNode.parameters[nodes[0].param].values
@@ -2303,7 +2308,46 @@ document.addEventListener("DOMContentLoaded", async () => {
             );
             
         }
+        */
+       // param is a knob
+        // get the y position of the first node
+        firstNodePosition = (nodes[0].value - gestureData.min) / gestureData.range;
 
+        // get the y position of the last node
+        lastNodePosition = (nodes[nodes.length - 1].value - gestureData.min) / gestureData.range;
+
+        const nodeOneY = viewportHeight - (firstNodePosition * viewportHeight); // Inverted y-coordinate
+    
+
+        const lastNodeY = viewportHeight - (lastNodePosition * viewportHeight); // Inverted y-coordinate
+        
+        // Add  fixed nodes at the bottom corners of the viewport for displaying the time and value ranges.
+        elements.push(
+            // {
+            //     group: 'nodes',
+            //     classes: 'timestamp',
+            //     data: { id: 'bottom-left', label: '0ms' },
+            //     position: { x: -30, y: nodeOneY } // 50px padding from bottom
+            // },
+            {
+                group: 'nodes',
+                classes: 'timestamp',
+                data: { id: 'bottom-right', label: timestampRange },
+                position: { x: viewportWidth + 40, y: lastNodeY } // 50px padding from bottom
+            },
+            {
+                group: 'nodes',
+                classes: 'valueStamp',
+                data: { id: 'bottom-left2', label: gestureData.min },
+                position: { x: -30, y: viewportHeight - 5} // 50px padding from bottom
+            },
+            {
+                group: 'nodes',
+                classes: 'valueStamp',
+                data: { id: 'top-left', label: gestureData.max },
+                position: { x: -30, y: 15 } // 50px padding from bottom
+            }
+        );
         
         
         // Add elements to the graph

@@ -1316,6 +1316,9 @@ wss.on('connection', (ws, req) => {
                 }))
             break
 
+            // *
+            // * History Window
+            // * 
             
             // this exists as a fallback on the client if in case the graph fails to render
             case 'requestCurrentPatchHistory':
@@ -1323,6 +1326,29 @@ wss.on('connection', (ws, req) => {
                     appID: 'forkingPathsMain',
                     cmd: 'reDrawHistoryGraph',
                     data: patchHistory
+                })
+            break
+
+            case 'getGestureData':
+                // get the head from this branch
+                let head = patchHistory.branches[msg.data.branch].head
+
+                let gestureDoc = loadAutomergeDoc(msg.data.branch)
+
+                // Use `Automerge.view()` to view the state at this specific point in history
+                const gestureView = Automerge.view(gestureDoc, [msg.data.hash]);
+                
+                let recallGesture = false
+                if(msg.data.cmd === 'recallGesture'){
+                    recallGesture = true
+                }
+
+                sendMsgToHistoryApp({
+                    appID: 'forkingPathsMain',
+                    cmd: 'getGestureData',
+                    data: gestureView.changeNode,
+                    recallGesture: recallGesture
+                        
                 })
             break
             //     // ws.send(message)
@@ -1552,7 +1578,7 @@ function updateHistoryGraph(){
             }, onChange, `paramUpdate ${paramName} = ${paramValue} $external`);
             
             
-        } else {2
+        } else {
             // store a gesture!
 
             // Extract values and timestamps into separate arrays
