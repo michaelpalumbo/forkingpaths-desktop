@@ -1121,6 +1121,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 break
                 case 'historyGraphRenderUpdate':
                     console.log('historyGraph', msg.data)
+                    
                     historyGraphNodesArray = msg.data.elements.nodes;
                     setGraphFromHistoryRenderer(msg);
                     graphJSONstore = msg;
