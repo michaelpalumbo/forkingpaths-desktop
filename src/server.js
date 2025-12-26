@@ -547,10 +547,9 @@ function sendSyncMessage() {
 
 }
 
-let emptyHistory = false
 function createNewPatchHistory(data = false){
 
-    console.log(data)
+
     // delete the document in the indexedDB instance
     // deleteDocument('patchHistory')
 
@@ -603,7 +602,7 @@ function createNewPatchHistory(data = false){
             currentBranch.title = config.patchHistory.firstBranchName;
             currentBranch.parameterSpace = data,
             currentBranch.openSoundControl = {}
-        }, onChange, `blank_patch`);
+        }, onChange, `initial_param_state ${data}`);
         
 
         
@@ -1173,7 +1172,6 @@ wss.on('connection', (ws, req) => {
                 console.log('New Connection: maxMspClient')
 
                 // get the cached state
-                console.log(patchHistory)
                 if(!patchHistory.head.hash){
                     maxMspClient.send(JSON.stringify({
                         cmd: 'getParamStates'
@@ -1227,16 +1225,15 @@ wss.on('connection', (ws, req) => {
 
             case 'newPatchHistory':
                 
-            if(maxMspClient){
-                // send message to max client to get cached state
-                maxMspClient.send(JSON.stringify({
-                    cmd: 'getParamStates'
-                }))
-            } else {
-                console.log('\n\ntodo: in this case, the maxClient isnt connected/open yet\nso, need to just clear the patch history AND inform history client that no external clients are connected yet')
-
-                createNewPatchHistory()
-            }
+                if(maxMspClient){
+                    // send message to max client to get cached state, which will then be added as the first changeNode in a new history
+                    maxMspClient.send(JSON.stringify({
+                        cmd: 'getParamStates'
+                    }))
+                } else {
+                    // create a blank patch history
+                    createNewPatchHistory()
+                }
             
 
             

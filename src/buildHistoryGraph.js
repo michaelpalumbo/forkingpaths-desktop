@@ -87,6 +87,7 @@ function buildHistoryGraph(patchHistory, existingHistoryNodeIDs, docHistoryGraph
             let sequencerTable 
             let mergeData
             let paramData
+            let stateData;
             // we now store the parent module data in the change message, so extract that so it doesn't appear as the label, and place it in the 'parent' prop
             // check if its a $PARENT or $PARENTS condition
             if(item.msg.includes('$PARENT ')){
@@ -120,6 +121,11 @@ function buildHistoryGraph(patchHistory, existingHistoryNodeIDs, docHistoryGraph
                 // sequencerTable = JSON.parse(item.msg.split('tableData:')[1])
             }
 
+            else if(item.msg.includes(`initial_param_state`)){
+                label = item.msg.split(' ')[0]
+                stateData = item.msg.split(' ')[1]
+
+            }
             else if(item.msg.includes('$external')){
                 label = item.msg
                 
@@ -144,7 +150,8 @@ function buildHistoryGraph(patchHistory, existingHistoryNodeIDs, docHistoryGraph
                     sequencerTable: sequencerTable || null,
                     timeStamp: item.timeStamp,
                     mergeData: mergeData || null,
-                    peer: item.peer || null
+                    peer: item.peer || null,
+                    stateData: stateData || null
 
                 },
                 // Add a manual position!
