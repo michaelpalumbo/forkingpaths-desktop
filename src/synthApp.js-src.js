@@ -60,6 +60,7 @@ let groupChange = { }
 
 document.addEventListener("DOMContentLoaded", function () {
 
+    /*
     let automergeRunning = false
  
     //* AUTOMERGE IMPLEMENTATION
@@ -142,6 +143,8 @@ document.addEventListener("DOMContentLoaded", function () {
             }, 1000);
         }
     }
+
+    */
     
     // Set an interval to periodically save patchHistory to IndexedDB
     setInterval(async () => {
@@ -1385,20 +1388,20 @@ document.addEventListener("DOMContentLoaded", function () {
                 
             break
 
-            case 'newPatchHistory':
-                createNewPatchHistory()
-                //? send a message to peer(s) to clear their patch history
-                // if createNewPatchHistory() was called from the syncMessageDataChannel, don't send out the message (aka, another peer already initiated the new patchHistory)
+            // case 'newPatchHistory':
+                
+            //     //? send a message to peer(s) to clear their patch history
+            //     // if createNewPatchHistory() was called from the syncMessageDataChannel, don't send out the message (aka, another peer already initiated the new patchHistory)
             
-                // console.log('sending new patchHistory')
-                // const message = {
-                //     cmd: 'newPatchHistory',
-                //     from: thisPeerID
-                // };
+            //     // console.log('sending new patchHistory')
+            //     // const message = {
+            //     //     cmd: 'newPatchHistory',
+            //     //     from: thisPeerID
+            //     // };
             
-                // sendDataChannelMessage(message)
+            //     // sendDataChannelMessage(message)
               
-            break
+            // break
 
             case 'savePatchHistory':
 

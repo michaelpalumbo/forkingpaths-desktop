@@ -21,8 +21,7 @@ const config = {
 }
 // Use the correct protocol based on your site's URL
 const WS_URL = `ws://${window.location.host}/ws`;
-// const WS_URL = "wss://historygraphrenderer.onrender.com/10000"
-// const ws = new WebSocket(WS_URL);
+
 
 if(!localStorage.appSettings){
     let settings = {
@@ -1010,7 +1009,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     // *
 
     function sendToMainApp(msg){
-        window.opener?.postMessage(msg, '*');
+
+        // ignore the following features for now:
+        switch(msg.cmd){
+            case 'remotePeerHistoryMousePosition':
+            case 'remotePeerHistoryMouseClick':
+
+            return
+            
+        }
+        if(ws){
+            ws.send(JSON.stringify(msg))
+        }
+        // window.opener?.postMessage(msg, '*');
     }
     
 
@@ -1020,17 +1031,296 @@ document.addEventListener("DOMContentLoaded", async () => {
             // console.log(event.data)
             switch (event.data.cmd){
 
-                case 'setRoom':
-                    room = event.data.room
+            
+
+                
+                
+                // commented out because this is now handled by the main app
+                // case 'clearHistoryGraph':
+                //     ws.send(JSON.stringify({
+                //         cmd: 'clearHistoryGraph'
+                //     }))
+ 
+                // break
+                default: console.log('no switch case for message:', event.data)
+            }
+        }
+
+   
+    });
+
+
+
+    function loadVersion(nodeID, branch, gestureDataPoint, fromSequencer){
+        // Perform your action with the step data
+        sendToMainApp(
+            {
+                cmd: "loadVersion",
+                data: { hash: nodeID, branch: branch, fromSequencer: fromSequencer },
+            }
+        );
+    }
+
+    function loadVersionWithGestureDataPoint(nodeID, branch, gestureDataPoint){
+        // Perform your action with the step data
+        sendToMainApp(
+            {
+                cmd: "loadVersionWithGestureDataPoint",
+                data: { hash: nodeID, branch: branch, gestureDataPoint: gestureDataPoint },
+            }
+        );
+
+    }
+    
+    let ws
+    let reconnectInterval = 1000;
+    let retryAttempts = 0
+    let sequencerSyncdWithServer = false
+    function connectWebSocket() {
+        ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+            // console.log('Connected to WebSocket server at', WS_URL);
+
+            if(retryAttempts > 0){
+                showSnackbar('Server connection successful. Resuming history graph updates', 10000)
+                retryAttempts = 0
+            }
+            reconnectInterval = 1000; // reset interval on successful reconnect
+           
+            sendToMainApp({
+                cmd: 'historyWindowReady'
+            });
+
+            // request current sequencer state
+            // console.log('room', room)
+            // ws.send(JSON.stringify({
+            //     cmd: 'getSequencerState',
+            //     room: room
+            // }))
+
+        };
+
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            switch (msg.cmd) {
+
+                case 'highlightHistoryNode':
+                    let historyNode = historyDAG_cy.getElementById(event.data.data)
                     
-                    if(room){
-                        console.log(room)
-                        ws.send(JSON.stringify({
-                            cmd: 'getSequencerState',
-                            room: room
-                        }))
-                    }
+                    highlightNode(historyNode)
                 break
+
+                case 'reDrawHistoryGraph':
+
+                    patchHistory = msg
+
+                    modifyGestureParamAssign() 
+
+
+                break
+                case 'historyGraphRenderUpdate':
+                    console.log('endpoint')
+                    historyGraphNodesArray = msg.data.elements.nodes;
+                    setGraphFromHistoryRenderer(msg);
+                    graphJSONstore = msg;
+
+                    
+                break;
+
+                case 'panToBranch':
+                    
+                    panToBranch(event.data.data)
+                break
+
+                case 'newPatchHistory':
+
+                    resetSequencerTable() 
+                    createGestureGraph()
+                break
+
+                case 'sequencerUpdate': 
+
+                break
+
+                case 'selectedNode':
+                    console.warn('node selection for history analysis not setup yet, see section associated with this line')
+
+                    if(event.data.data === 'unselected'){
+                        // clear global variable
+                        selectedModule = null
+
+                        UI.query.selectModuleChangesCheckbox.disabled = true
+                        // remove results in history analysis 
+
+                        // remove it as an option in the selectmenu
+                        // modifyHistoryAnalysisMenu('removeSelectedModule')
+                    }else {
+                        UI.query.selectModuleChangesCheckbox.disabled = false
+                        
+                        // store selected node in global variable
+                        selectedModule = event.data.data
+                        // set it as an option in the selectmenu
+                        // modifyHistoryAnalysisMenu('setSelectedModule', event.data.data)
+                        // when user selects it, retrieve all changes related to that node
+                    }
+
+                break
+                
+                case 'hydrateGesture':
+
+                    let tempGestureData = {
+                        scheduler: [],
+                        historyID: event.data.data.historyID,
+                        branch: event.data.data.branch,
+                        assign: {
+                            param: 'default'
+                        }
+
+                    }
+                    const minVal2 = Math.min(...event.data.data.values);
+                    const maxVal2 = Math.max(...event.data.data.values);
+                    tempGestureData.range = maxVal2 - minVal2
+                    tempGestureData.min = minVal2
+                    tempGestureData.max = maxVal2
+
+
+                    // set the gesture length, start and end times
+                    tempGestureData.startTime = event.data.data.timestamps[0]
+                    tempGestureData.endTime = event.data.data.timestamps[event.data.data.timestamps.length - 1]
+                    tempGestureData.length = tempGestureData.endTime - tempGestureData.startTime
+
+                    tempGestureData.values = event.data.data.values
+                    tempGestureData.timestamps = event.data.data.timestamps
+                    
+                    // map the gesture values and timestamps to a new array of objects
+                    const gestureArray2 = event.data.data.values.map((value, i) => ({
+                        value: value,
+                        timestamp: event.data.data.timestamps[i],
+                        parent: event.data.data.parent,
+                        param: event.data.data.param,
+                        msg: 'gesture',
+                        historyID: tempGestureData.historyID,
+                        branch: tempGestureData.branch
+                    }));
+
+
+                    tempGestureData.gesturePoints = gestureArray2
+                    tempGestureData.linearGesturePoints = gestureArray2
+
+
+                    sequencerData.gestures[event.data.index] = tempGestureData
+                break
+
+                case 'getGestureData':
+
+                    const minVal = Math.min(...event.data.data.values);
+                    const maxVal = Math.max(...event.data.data.values);
+                    gestureData.range = maxVal - minVal
+                    gestureData.min = minVal
+                    gestureData.max = maxVal
+                    // set the gesture length, start and end times
+                    gestureData.startTime = event.data.data.timestamps[0]
+                    gestureData.endTime = event.data.data.timestamps[event.data.data.timestamps.length - 1]
+                    gestureData.length = gestureData.endTime - gestureData.startTime
+
+                    gestureData.values = event.data.data.values
+                    gestureData.timestamps = event.data.data.timestamps
+                    
+                    // map the gesture values and timestamps to a new array of objects
+                    const gestureArray = event.data.data.values.map((value, i) => ({
+                        value: value,
+                        timestamp: event.data.data.timestamps[i],
+                        parent: event.data.data.parent,
+                        param: event.data.data.param,
+                        msg: 'gesture',
+                        historyID: gestureData.historyID,
+                        branch: gestureData.branch
+                    }));
+
+
+                    gestureData.gesturePoints = gestureArray
+                    gestureData.linearGesturePoints = gestureArray
+            
+                    let playback = event.data.recallGesture
+                    createGestureGraph(gestureArray, playback)
+                break
+
+                case 'sequencerState':
+                    console.log('sequencerState', msg.state)
+                    if(Object.keys(msg.state).length === 0 && msg.state){
+                        // this is an edge case, but happens if the synthApp refreshes or closes and the history app doesn't
+                        resetSequencerTable()
+                        sequencerSyncdWithServer = true
+                    }
+                    else if(msg.state && !sequencerSyncdWithServer){
+                        // prevent sync with server more than once
+                        sequencerSyncdWithServer = true
+
+                        
+
+                        
+                            // set set this here so that if msg.state.isPlaying===true, then isPlaying will be set in the saveSequencerTable() updates below
+                            if(msg.state.isPlaying){
+                                isPlaying = msg.state.isPlaying
+                            }
+                            let table = msg.state.tableData
+                            // set sequencer table
+                            table.forEach((step, index) => {
+                                
+                                if (step.node) {
+                                    // check if step node is a gesture, we need to hydrate the sequence first
+                                    // console.log(step)
+                                    if(step.node.label.split(' ')[0] === 'gesture'){
+                                    
+                                        sendToMainApp(
+                                            {
+                                                cmd: "hydrateGesture",
+                                                data: { hash: step.node.id, branch: step.node.branch, index: index },
+                                            }
+                                        ); 
+                                    }
+                        
+                                    
+                                    updateStepRow(index, step.node, null, step.stepLength, true);
+                                } else {
+                                    clearStepRow(index); // you'd need to define this if it doesn't already exist
+                                }
+                            });
+                            // set the modes
+                            Object.keys(msg.state.modes).forEach((mode, index)=>{
+                                // update value
+                                UI.sequencer.modes[mode].value = msg.state.modes[mode]
+                                // trigger change event to update them in the system
+                                const event = new Event('change', { bubbles: true });
+                                UI.sequencer.modes[mode].dispatchEvent(event);
+                            })
+                            // set the BPM
+                            setBPM(msg.state.rawBPM)
+
+                            // set the playback state (i.e. start it if isPlaying===true)
+                            if(msg.state.isPlaying){
+                                console.log('isPlaying')
+                                // syncd sequencer playback confirmation modal (opens on load if sequencer state from peer and sequencer is currently running)
+                                // we use this so that the player starts the audio context with a gesture (otherwise the browser blocks the sequencer start)
+                                UI.sequencer.sync.popup.style.display = 'block';
+                            }
+                        
+                    }
+                    
+                break
+
+                //     case 'setRoom':
+                //     room = event.data.room
+                    
+                //     if(room){
+                //         console.log(room)
+                //         ws.send(JSON.stringify({
+                //             cmd: 'getSequencerState',
+                //             room: room
+                //         }))
+                //     }
+                // break
                 case 'remotePeerHistoryMousePosition':
                     switch(event.data.data.action){
 
@@ -1177,301 +1467,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     }
                 break
-                case 'highlightHistoryNode':
-                    let historyNode = historyDAG_cy.getElementById(event.data.data)
-                    
-                    highlightNode(historyNode)
-                break
-
-                case 'reDrawHistoryGraph':
-                    patchHistory = event.data.data
-                    // thisPeerID = event.data.peerID
-                    // room = event.data.room
-
-                    // console.log(thisPeerID, room)
-                    // reDrawHistoryGraph(patchHistory)
-                            // Send the elements to the server for rendering
-                    const update = JSON.stringify({
-                        cmd: 'updateGraph',
-                        patchHistory: patchHistory,
-                        // existingHistoryNodeIDs: existingHistoryNodeIDs,
-                        docHistoryGraphStyling: docHistoryGraphStyling
-                    })
-                    
-                    ws.send(update);
-                    // if(patchHistory && patchHistory.sequencer){
-                    //     bpmValue.textContent = patchHistory.sequencer.bpm; // Display the current BPM
-                    //     transport.bpm.value = patchHistory.sequencer.bpm; // Dynamically update the BPM
-
-                    // }
-
-
-
-
-                    modifyGestureParamAssign() 
-
-
-                break
-                case 'panToBranch':
-                    
-                    panToBranch(event.data.data)
-                break
-
-                case 'newPatchHistory':
-
-                    resetSequencerTable() 
-                    createGestureGraph()
-                break
-
-                case 'sequencerUpdate': 
-
-                break
-
-                case 'selectedNode':
-                    console.warn('node selection for history analysis not setup yet, see section associated with this line')
-
-                    if(event.data.data === 'unselected'){
-                        // clear global variable
-                        selectedModule = null
-
-                        UI.query.selectModuleChangesCheckbox.disabled = true
-                        // remove results in history analysis 
-
-                        // remove it as an option in the selectmenu
-                        // modifyHistoryAnalysisMenu('removeSelectedModule')
-                    }else {
-                        UI.query.selectModuleChangesCheckbox.disabled = false
-                        
-                        // store selected node in global variable
-                        selectedModule = event.data.data
-                        // set it as an option in the selectmenu
-                        // modifyHistoryAnalysisMenu('setSelectedModule', event.data.data)
-                        // when user selects it, retrieve all changes related to that node
-                    }
-
-                break
-                
-                case 'hydrateGesture':
-
-                    let tempGestureData = {
-                        scheduler: [],
-                        historyID: event.data.data.historyID,
-                        branch: event.data.data.branch,
-                        assign: {
-                            param: 'default'
-                        }
-
-                    }
-                    const minVal2 = Math.min(...event.data.data.values);
-                    const maxVal2 = Math.max(...event.data.data.values);
-                    tempGestureData.range = maxVal2 - minVal2
-                    tempGestureData.min = minVal2
-                    tempGestureData.max = maxVal2
-
-
-                    // set the gesture length, start and end times
-                    tempGestureData.startTime = event.data.data.timestamps[0]
-                    tempGestureData.endTime = event.data.data.timestamps[event.data.data.timestamps.length - 1]
-                    tempGestureData.length = tempGestureData.endTime - tempGestureData.startTime
-
-                    tempGestureData.values = event.data.data.values
-                    tempGestureData.timestamps = event.data.data.timestamps
-                    
-                    // map the gesture values and timestamps to a new array of objects
-                    const gestureArray2 = event.data.data.values.map((value, i) => ({
-                        value: value,
-                        timestamp: event.data.data.timestamps[i],
-                        parent: event.data.data.parent,
-                        param: event.data.data.param,
-                        msg: 'gesture',
-                        historyID: tempGestureData.historyID,
-                        branch: tempGestureData.branch
-                    }));
-
-
-                    tempGestureData.gesturePoints = gestureArray2
-                    tempGestureData.linearGesturePoints = gestureArray2
-
-
-                    sequencerData.gestures[event.data.index] = tempGestureData
-                break
-
-                case 'getGestureData':
-
-                    const minVal = Math.min(...event.data.data.values);
-                    const maxVal = Math.max(...event.data.data.values);
-                    gestureData.range = maxVal - minVal
-                    gestureData.min = minVal
-                    gestureData.max = maxVal
-                    // set the gesture length, start and end times
-                    gestureData.startTime = event.data.data.timestamps[0]
-                    gestureData.endTime = event.data.data.timestamps[event.data.data.timestamps.length - 1]
-                    gestureData.length = gestureData.endTime - gestureData.startTime
-
-                    gestureData.values = event.data.data.values
-                    gestureData.timestamps = event.data.data.timestamps
-                    
-                    // map the gesture values and timestamps to a new array of objects
-                    const gestureArray = event.data.data.values.map((value, i) => ({
-                        value: value,
-                        timestamp: event.data.data.timestamps[i],
-                        parent: event.data.data.parent,
-                        param: event.data.data.param,
-                        msg: 'gesture',
-                        historyID: gestureData.historyID,
-                        branch: gestureData.branch
-                    }));
-
-
-                    gestureData.gesturePoints = gestureArray
-                    gestureData.linearGesturePoints = gestureArray
-            
-                    let playback = event.data.recallGesture
-                    createGestureGraph(gestureArray, playback)
-                break
-                // commented out because this is now handled by the main app
-                // case 'clearHistoryGraph':
-                //     ws.send(JSON.stringify({
-                //         cmd: 'clearHistoryGraph'
-                //     }))
- 
-                // break
-                default: console.log('no switch case for message:', event.data)
-            }
-        }
-
-        // if (event.data.cmd === 'updateGraph') {
-        //     const graphData = event.data.data;
-        //     updateGraph(graphData);
-        // }
-    });
-
-
-
-    function loadVersion(nodeID, branch, gestureDataPoint, fromSequencer){
-        // Perform your action with the step data
-        sendToMainApp(
-            {
-                cmd: "loadVersion",
-                data: { hash: nodeID, branch: branch, fromSequencer: fromSequencer },
-            }
-        );
-    }
-
-    function loadVersionWithGestureDataPoint(nodeID, branch, gestureDataPoint){
-        // Perform your action with the step data
-        sendToMainApp(
-            {
-                cmd: "loadVersionWithGestureDataPoint",
-                data: { hash: nodeID, branch: branch, gestureDataPoint: gestureDataPoint },
-            }
-        );
-
-    }
-    
-    let ws
-    let reconnectInterval = 1000;
-    let retryAttempts = 0
-    let sequencerSyncdWithServer = false
-    function connectWebSocket() {
-        ws = new WebSocket(WS_URL);
-
-        ws.onopen = () => {
-            // console.log('Connected to WebSocket server at', WS_URL);
-
-            if(retryAttempts > 0){
-                showSnackbar('Server connection successful. Resuming history graph updates', 10000)
-                retryAttempts = 0
-            }
-            reconnectInterval = 1000; // reset interval on successful reconnect
-           
-            sendToMainApp({
-                cmd: 'historyWindowReady'
-            });
-
-            // request current sequencer state
-            // console.log('room', room)
-            // ws.send(JSON.stringify({
-            //     cmd: 'getSequencerState',
-            //     room: room
-            // }))
-
-        };
-
-        ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data);
-            switch (msg.cmd) {
-                case 'historyGraphRenderUpdate':
-                    historyGraphNodesArray = msg.data.elements.nodes;
-                    setGraphFromHistoryRenderer(msg);
-                    graphJSONstore = msg;
-
-                    
-                break;
-
-                case 'sequencerState':
-                    console.log('sequencerState', msg.state)
-                    if(Object.keys(msg.state).length === 0 && msg.state){
-                        // this is an edge case, but happens if the synthApp refreshes or closes and the history app doesn't
-                        resetSequencerTable()
-                        sequencerSyncdWithServer = true
-                    }
-                    else if(msg.state && !sequencerSyncdWithServer){
-                        // prevent sync with server more than once
-                        sequencerSyncdWithServer = true
-
-                        
-
-                        
-                            // set set this here so that if msg.state.isPlaying===true, then isPlaying will be set in the saveSequencerTable() updates below
-                            if(msg.state.isPlaying){
-                                isPlaying = msg.state.isPlaying
-                            }
-                            let table = msg.state.tableData
-                            // set sequencer table
-                            table.forEach((step, index) => {
-                                
-                                if (step.node) {
-                                    // check if step node is a gesture, we need to hydrate the sequence first
-                                    // console.log(step)
-                                    if(step.node.label.split(' ')[0] === 'gesture'){
-                                    
-                                        sendToMainApp(
-                                            {
-                                                cmd: "hydrateGesture",
-                                                data: { hash: step.node.id, branch: step.node.branch, index: index },
-                                            }
-                                        ); 
-                                    }
-                        
-                                    
-                                    updateStepRow(index, step.node, null, step.stepLength, true);
-                                } else {
-                                    clearStepRow(index); // you'd need to define this if it doesn't already exist
-                                }
-                            });
-                            // set the modes
-                            Object.keys(msg.state.modes).forEach((mode, index)=>{
-                                // update value
-                                UI.sequencer.modes[mode].value = msg.state.modes[mode]
-                                // trigger change event to update them in the system
-                                const event = new Event('change', { bubbles: true });
-                                UI.sequencer.modes[mode].dispatchEvent(event);
-                            })
-                            // set the BPM
-                            setBPM(msg.state.rawBPM)
-
-                            // set the playback state (i.e. start it if isPlaying===true)
-                            if(msg.state.isPlaying){
-                                console.log('isPlaying')
-                                // syncd sequencer playback confirmation modal (opens on load if sequencer state from peer and sequencer is currently running)
-                                // we use this so that the player starts the audio context with a gesture (otherwise the browser blocks the sequencer start)
-                                UI.sequencer.sync.popup.style.display = 'block';
-                            }
-                        
-                    }
-                    
-                break
+  
 
             }
         };

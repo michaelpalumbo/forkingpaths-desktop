@@ -3,6 +3,10 @@ import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import buildHistoryGraph from './buildHistoryGraph.js';
 
+import fs from 'node:fs';
+import path from 'path';
+
+
 import express from 'express';
 import { createServer} from 'http';
 
@@ -20,8 +24,13 @@ import osc from "osc";
 import { OSCQueryDiscovery } from "oscquery";
 
 import {username} from 'username';
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 
-
+// 1. Get the current file path (similar to __filename)
+const __filename = fileURLToPath(import.meta.url);
+// 2. Get the directory name (similar to __dirname)
+const __dirname = dirname(__filename);
 
 let userName = await username()
 console.log(userName);
@@ -31,10 +40,30 @@ let wss;
 let namespaceState = {}
 
 let config = {
+    dbStore:{
+        saveInterval: 1000
+    },
     patchHistory: {
         firstBranchName: "main"
+    },
+    docHistoryGraphStyling: {
+        nodeColours: {
+            connect: "#004cb8",
+            disconnect: "#b8000f",
+            // add: "#00b806",
+            // remove: "#b8000f",
+            merge: "#e0ad1a",
+            paramUpdate: "#6b00b8",
+            gesture: "#00ffff",
+            clear: "#000000",
+            sequence: "#00b39b", 
+            draw: "#b85c00",
+            blank_patch: "#ccc"
+        }
     }
 }
+
+
  
 //* AUTOMERGE IMPLEMENTATION
 let Automerge;
@@ -102,7 +131,207 @@ async function startAutomerge() {
 
         createNewPatchHistory();
 
+    } else {
+
+        // patchHistory does contain at least one document, so grab whichever is the one that was last looked at
+        currentBranch = Automerge.load(patchHistory.docs[patchHistory.head.branch]);
+
+        // wait 1 second before loading content (give the audio worklet a moment to load)
+        setTimeout(()=>{
+
+            oscRecall(currentBranch.openSoundControl)
+
+            // recall max patch state
+            maxStateRecall(currentBranch.parameterSpace)
+            
+            previousHash = patchHistory.head.hash
+            
+            // send doc to history app
+            reDrawHistoryGraph()
+
+        }, 1000);
     }
+}
+
+// Set an interval to periodically save patchHistory to IndexedDB
+setInterval(async () => {
+    
+    // if(patchHistory && syncMessageDataChannel && syncMessageDataChannel.readyState === 'closed'){
+    if(patchHistory && docUpdated){
+        
+        fs.writeFileSync(path.join(__dirname, 'storage/patchHistoryStore.json'), JSON.stringify(Automerge.save(patchHistory), null, 2))
+        // await saveDocument(docID, Automerge.save(currentBranch));
+        // await dbStore.saveDocument(1, Automerge.save(patchHistory));
+        docUpdated = false
+    }
+
+}, config.dbStore.saveInterval);
+
+function applyChange(doc, changeCallback, onChangeCallback, changeMessage) {
+    // in this condition, we are applying a change on the current branch
+    if(automergeDocuments.newClone === false ){
+        let amMsg = makeChangeMessage(patchHistory.head.branch, changeMessage)
+        // we are working from a head
+
+        // grab the current hash before making the new change:
+        previousHash = patchHistory.head.hash
+        
+        // Apply the change using Automerge.change
+        currentBranch = Automerge.change(currentBranch, amMsg, changeCallback);
+
+
+        // If there was a change, call the onChangeCallback
+        if (currentBranch !== doc && typeof onChangeCallback === 'function') {
+            let hash = Automerge.getHeads(currentBranch)[0]
+            
+            patchHistory = Automerge.change(patchHistory, (patchHistory) => {
+
+                // if the current patchHistory was loaded from the database, then we need to create a fork for this new change
+                if (patchHistory.hasBeenModified === false) {
+                    patchHistory.forked_from_id = patchHistory.databaseID
+                    patchHistory.hasBeenModified = true
+                    forkHistoryInDatabase(patchHistory.databaseID)
+                }
+                // Initialize the branch patchHistorydata if it doesn't already exist
+                if (!patchHistory.branches[patchHistory.head.branch]) {
+                    patchHistory.branches[patchHistory.head.branch] = { head: null, history: [] };
+                }
+                // Update the head property
+                patchHistory.branches[patchHistory.head.branch].head = hash;
+
+                // Push the new history entry into the existing array
+                patchHistory.branches[patchHistory.head.branch].history.push({
+                    hash: hash,
+                    parent: previousHash,
+                    msg: changeMessage,
+                    timeStamp: new Date().getTime()
+
+                });
+
+                // encode the doc as a binary object for efficiency
+                patchHistory.docs[patchHistory.head.branch] = Automerge.save(currentBranch)
+                // store the HEAD info
+                patchHistory.head.hash = hash
+                patchHistory.timeStamp = new Date().getTime()
+                //? patchHistory.head.branch = currentBranch.title
+                
+            });
+
+
+            
+            // updatePatchHistoryDatabase()
+
+            onChangeCallback(currentBranch);
+        }
+        return currentBranch;
+    } else {
+        // player has made changes to an earlier version, so create a branch and set currentBranch to new clone
+
+        // store previous currentBranch in automergeDocuments, and its property is the hash of its head
+        automergeDocuments.otherDocs[patchHistory.head.branch] = currentBranch
+        // set currentBranch to current cloned doc
+        currentBranch = Automerge.clone(automergeDocuments.current.doc)
+
+        // create a new branch name
+        const newBranchName = uuidv7();
+        // use the new branch title
+        let amMsg = makeChangeMessage(patchHistory.head.branch, changeMessage)
+
+        // grab the current hash before making the new change:
+        previousHash = Automerge.getHeads(currentBranch)[0]
+        
+        // Apply the change using Automerge.change
+        currentBranch = Automerge.change(currentBranch, amMsg, changeCallback);
+        let hash = Automerge.getHeads(currentBranch)[0]
+        
+        // If there was a change, call the onChangeCallback
+        if (currentBranch !== doc && typeof onChangeCallback === 'function') {   
+            const timestamp = new Date().getTime()
+            patchHistory = Automerge.change(patchHistory, (patchHistory) => {
+
+                // create the branch
+                patchHistory.branches[newBranchName] = {
+                    head: hash,
+                    parent: previousHash,
+                    history: [{
+                        hash: hash,
+                        msg: changeMessage,
+                        parent: previousHash,
+                        timeStamp: timestamp
+                    }]
+                }
+
+                // store current doc
+                patchHistory.docs[newBranchName] = Automerge.save(currentBranch)
+                
+                // store the HEAD info
+                patchHistory.head.hash = hash
+                patchHistory.head.branch = newBranchName
+
+                patchHistory.timeStamp = timestamp
+
+                // store the branch name so that we can ensure its ordering later on
+                patchHistory.branchOrder.push(newBranchName)
+
+                // if the current patchHistory was loaded from the database, then we need to create a fork for this new change
+                if (patchHistory.hasBeenModified === false) {
+                    patchHistory.forked_from_id = patchHistory.databaseID
+                    patchHistory.hasBeenModified = true
+                    forkHistoryInDatabase(patchHistory.databaseID)
+                }
+            });
+            
+            // makeBranch(changeMessage, Automerge.getHeads(newDoc)[0])
+            onChangeCallback(currentBranch);
+
+            // updatePatchHistoryDatabase()
+            automergeDocuments.newClone = false
+
+        }
+        return currentBranch;
+
+    }
+    
+
+}
+
+// define the onChange Callback
+onChange = () => {
+    // send to peer(s)
+    sendSyncMessage()
+    // update synth audio graph
+    // loadSynthGraph()
+    // You can add any additional logic here, such as saving to IndexedDB
+
+    // set docUpdated so that indexedDB will save it
+    docUpdated = true
+
+    
+    // update the historyGraph
+    reDrawHistoryGraph()
+
+
+};
+
+function sendSyncMessage() {
+    // todo: if we want to setup p2p, uncomment this
+    /*
+    if(!roomDetails.peer1 || !roomDetails.peer2){
+        return
+    }
+    if (syncMessageDataChannel && syncMessageDataChannel.readyState === "open") {
+        // syncState = Automerge.initSyncState();
+        let msg = Uint8Array | null
+        // Generate a sync message from the current doc and sync state.
+        ;[syncState, msg] = Automerge.generateSyncMessage(patchHistory, syncState);
+        // syncState = newSyncState; // update sync state with any changes from generating a message
+
+        if(msg != null){
+            syncMessageDataChannel.send(msg)
+        }
+    }
+    */
+
 }
 
 function createNewPatchHistory(){
@@ -217,14 +446,18 @@ function clearHistoryGraph(){
 function reDrawHistoryGraph(){
     patchHistoryIsDirty = true
 
-    wss.clients.forEach((client) => {
-        client.send(JSON.stringify({
-            appID: 'forkingPathsMain',
-            cmd: 'reDrawHistoryGraph',
-            data: patchHistory
+    // instead of sending to the history app...:
+    // wss.clients.forEach((client) => {
+    //     client.send(JSON.stringify({
+    //         appID: 'forkingPathsMain',
+    //         cmd: 'reDrawHistoryGraph',
+    //         data: patchHistory
                 
-        }))
-    });
+    //     }))
+    // });
+
+    // we should now pass this to the graph renderer, and return the result and pass THAT to the history app
+    updateHistoryGraph(patchHistoryClient, patchHistory, config.docHistoryGraphStyling)
 
 }
 
@@ -631,6 +864,8 @@ server.on('upgrade', (request, socket, head) => {
 
   
 let numClients = 0
+
+let patchHistoryClient
 // Handle client connections
 wss.on('connection', (ws, req) => {
     numClients++
@@ -646,34 +881,93 @@ wss.on('connection', (ws, req) => {
         
         switch(msg.cmd){
 
-            case 'maxParamUpdate':
+
             case 'maxStateRecall':
+
+            break
+
+                   //? keep this for now in case we can reuse it for other oscQuery-enabled programs
+                case 'namespaceState':
+                    console.log(msg.data)
+                    // in this case, FP is receiving the full state of the OSC namespace in Max including the values. 
+                    // i could be wrong, but i think this would always be the first changeNode in the history graph. maybe it needs to be a new changeNode type?
+                    currentBranch = applyChange(currentBranch, (currentBranch) => {
+                        currentBranch.openSoundControl = msg.data
+                        // set the change type
+                        currentBranch.changeNode = {
+                            msg: 'paramUpdate',
+                            param: "namespace",
+                            parent: "none",
+                            value: 'placeholder'
+                        }
+                    }, onChange, `paramUpdate namespace = placeholder`);
+                break
+
+                //? keep this for now in case we can reuse it for other oscQuery-enabled programs
+                case 'OSCmsg':
+                    // console.log(msg)
+                    let AP = msg.data.address
+                    let TTS = msg.data.args
+                    
+                    currentBranch = applyChange(currentBranch, (currentBranch) => {
+                        if(!currentBranch.openSoundControl){
+                            currentBranch.openSoundControl = {}
+                        }
+                        if(!currentBranch.openSoundControl[AP]){
+                            currentBranch.openSoundControl[AP] = []
+                        }
+                        currentBranch.openSoundControl[AP] = TTS
+                        // set the change type
+                        currentBranch.changeNode = {
+                            msg: 'paramUpdate',
+                            param: AP,
+                            parent: "none",
+                            value: TTS
+                        }
+                    }, onChange, `paramUpdate ${AP} = ${TTS}`);
+                break;
+            case 'maxParamUpdate':
+                console.log(msg)
+                currentBranch = applyChange(currentBranch, (currentBranch) => {
+                    if(!currentBranch.parameterSpace){
+                        currentBranch.parameterSpace = {}
+                    }
+                    if(!currentBranch.parameterSpace[msg.param]){
+                        currentBranch.parameterSpace[msg.param] = []
+                    }
+                    currentBranch.parameterSpace[msg.param] = msg.value
+                    // set the change type
+                    currentBranch.changeNode = {
+                        msg: 'paramUpdate',
+                        param: msg.param,
+                        parent: "none",
+                        value: msg.value
+                    }
+                }, onChange, `paramUpdate ${msg.param} = ${msg.value} $external`);
+
+                // console.log(currentBranch.parameterSpace)
+
+            break
             case 'maxCachedState':
 
-                wss.clients.forEach((client) => {
-                    client.send(JSON.stringify(msg))
-                });
+                // console.log(msg.data)
+                // in this case, FP is receiving the full state of the OSC namespace in Max including the values. 
+                // i could be wrong, but i think this would always be the first changeNode in the history graph. maybe it needs to be a new changeNode type?
+                currentBranch = applyChange(currentBranch, (currentBranch) => {
+                    currentBranch.parameterSpace = msg.data
+                    // set the change type
+                    currentBranch.changeNode = {
+                        msg: 'paramUpdate',
+                        param: "parameterSpace",
+                        parent: "none",
+                        value: 'fullState'
+                    }
+                }, onChange, `paramUpdate $external`);
+
+                // console.log(currentBranch.parameterSpace)
                 
             break
 
-            // case 'maxCachedState':
-            //     // console.log(msg)
-
-            //     wss.clients.forEach((client) => {
-            //         client.send(JSON.stringify(msg))
-            //     });
-                
-            // break
-
-            // case 'maxStateRecall':
-            //     // console.log(msg.data)
-            //     wss.clients.forEach((client) => {
-            //         client.send(JSON.stringify(msg))
-            //         // if (client !== ws) {
-                        
-            //         // }
-            //     });
-            // break
             case "oscRecall":
                 console.log('recall', msg.data)
                 for (const [address, args] of Object.entries(msg.data)) {
@@ -691,7 +985,8 @@ wss.on('connection', (ws, req) => {
             break
 
             case 'newPatchHistory':
-
+                console.log('snared', msg.cmd)
+                createNewPatchHistory()
             //todo: get the namespace state from max patch then send here:
                     //             wss.clients.forEach((client) => {
                     //     client.send(JSON.stringify({
@@ -721,13 +1016,56 @@ wss.on('connection', (ws, req) => {
 
             break;
 
+            case 'historyWindowReady':
+                
+                patchHistoryClient = ws
+                // sendMsgToHistoryApp({
+                //     appID: 'forkingPathsMain',
+                //     cmd: 'reDrawHistoryGraph',
+                //     data: patchHistory,
+                //     // room: room
+                // })
 
+                updateHistoryGraph(ws, patchHistory, config.docHistoryGraphStyling)
+                // sendMsgToHistoryApp({
+                //     appID: 'forkingPathsMain',
+                //     cmd: 'setRoom',
+                //     room: 1
+                // })
+                // // get room info (which includes the sequencer state of the remote peer)
+                // ws.send(JSON.stringify({
+                //     cmd: 'getSequencerState'
+                // }))
+                
+                // sendMsgToHistoryApp({
+                //     appID: 'forkingPathsMain',
+                //     cmd: 'syncPeerSequencer',
+                //     action: 'syncSequencerOnNewPeerConnection',
+                //     payload: sharedSequencerState
+                // })
+                
+                // if we have a remote peer and that peer has a sequencer state, send it to the local history window
+                // if(sharedSequencerState){
 
-            case 'updateGraph':
-                // patchHistory = msg.patchHistory
-                // console.log(patchHistory)
-                updateHistoryGraph(ws, patchHistory, msg.docHistoryGraphStyling)
+                // sendMsgToHistoryApp({
+                //     appID: 'forkingPathsMain',
+                //     cmd: 'sequencerModificationCheck',
+                //     // data: {
+                //     //     action: 'syncSequencerOnNewPeerConnection',
+                //     //     payload: sharedSequencerState
+                //     // }
+ 
+                // })
+            // }
+                
+                
             break
+
+            // case 'updateGraph':
+            //     // patchHistory = msg.patchHistory
+            //     // console.log(patchHistory)
+            //     updateHistoryGraph(ws, patchHistory, config.docHistoryGraphStyling)
+            // break
 
         
 
@@ -814,7 +1152,13 @@ wss.on('connection', (ws, req) => {
 
             // case "externalParamUpdate":
 
-                
+            case 'requestCurrentPatchHistory':
+                sendMsgToHistoryApp({
+                    appID: 'forkingPathsMain',
+                    cmd: 'reDrawHistoryGraph',
+                    data: patchHistory
+                })
+            break
             //     // ws.send(message)
 
             //     wss.clients.forEach((client) => {
@@ -827,7 +1171,7 @@ wss.on('connection', (ws, req) => {
             // break;
               
             
-            default: console.log('no switch case exists for msg:', message)
+            default: console.log('no switch case exists for msg:', JSON.parse(message))
         }
     });
 
@@ -931,13 +1275,16 @@ function updateHistoryGraph(ws, patchHistory, docHistoryGraphStyling){
 
     historyDAG_cy.layout(graphLayouts[graphStyle]).run();
 
-    // Send the graph JSON back to the client
+    // Send the graph JSON  to the patchHistory window
     const graphJSON = historyDAG_cy.json();
 
-    ws.send(JSON.stringify({
-        cmd: "historyGraphRenderUpdate", 
-        data: graphJSON
-    }))
+    wss.clients.forEach((client) =>{
+        client.send(JSON.stringify({
+            cmd: "historyGraphRenderUpdate", 
+            data: graphJSON
+        }))
+    })
+    
 }
 
 
@@ -971,4 +1318,15 @@ function updateHistoryGraph(ws, patchHistory, docHistoryGraphStyling){
             msg: msg
         })
         return amMsg
+    }
+
+    function sendMsgToHistoryApp(data) {
+
+        if(wss.clients.size > 0){
+            
+            wss.clients.forEach((client) => {
+                client.send(JSON.stringify(data))
+            });
+        }
+
     }
