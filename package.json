@@ -10,5 +10,13 @@
   },
   "devDependencies": {
     "vite": "^7.2.4"
+  },
+  "dependencies": {
+    "@automerge/automerge": "^3.2.1",
+    "base64-js": "^1.5.1",
+    "indexeddbshim": "^16.1.0",
+    "sqlite3": "^5.1.7",
+    "username": "^7.0.0",
+    "uuidv7": "^1.1.0"
   }
 }

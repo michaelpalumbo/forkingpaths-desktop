@@ -1,0 +1,343 @@
+
+/* General page styling */
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden; /* Prevent scrollbars caused by overflow */
+
+  /* background-color: rgb(76, 76, 146); */
+}
+
+/* Ensure #leftColumn takes full height */
+#graphColumn {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#docHistory-cy {
+  flex: 1; /* Make it grow to fill available vertical space */
+  overflow: auto; /* Allow scrolling if content overflows */
+}
+
+#gestureCyContainer {
+  height: 100%; /* Ensures it takes up the full height of the .row.h-25 */
+  display: flex;
+  justify-content: center; /* Optional: Center content horizontally */
+  align-items: center; /* Optional: Center content vertically */
+  overflow: hidden; /* Prevent content overflow */
+  background: transparent;
+}
+
+#gestureCy {
+  width: 100%;   /* Set width */
+  height: 100%; /* Set height */
+  border: 1px solid #ccc;
+}
+
+/* Ensure #historyController takes full height */
+#historyController {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Tooltip container styling */
+#cytoscapeTooltipContainer {
+  padding: 10px;
+  background-color: #f8f8f8;
+}
+
+#helpOverlay {
+  position: absolute; /* or fixed, depending on your layout */
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.95);
+  color: #111;
+  z-index: 9998;
+  padding: 1rem;
+  overflow-y: auto;
+  box-shadow: 0 0 20px rgba(0,0,0,0.2);
+  transition: opacity 0.5s ease;
+  opacity: 1;
+}
+
+#helpOverlay.hidden {
+  display: none;
+}
+
+#helpOverlayContent {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 100px;
+  color: #111;
+  font-size: 1.8rem;        /* base size — approx 2× normal text */
+  line-height: 1.9;
+  padding: 2rem;
+}
+
+#helpOverlayContent h2,
+#helpOverlayContent h3 {
+  font-size: 2.2rem;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+#helpOverlayContent ul {
+  padding-left: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+#helpOverlayContent p {
+  margin-bottom: 1.2rem;
+}
+
+.help-button {
+  font-size: 1.2rem;
+  padding: 0.2rem 0.5rem;
+  /* background: #eee; */
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #d4fcdc;
+  color: #1a3a1a;
+}
+
+
+
+#closeHelpOverlay {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  background: none;
+  border: none;
+  font-size: 3rem;
+  cursor: pointer;
+}
+
+
+#bpmSlider {
+  width: 40%;
+}
+
+/* Style only the slider with ID 'gesturePlayhead' */
+#gesturePlayhead {
+  appearance: none; /* Remove default browser styles */
+  -webkit-appearance: none; /* For Safari */
+  background: transparent; /* Make the rail invisible */
+  width: 100%; /* Full-width slider */
+  height: 16px; /* Thumb visibility area */
+}
+
+/* Remove the rail (track) for WebKit browsers (e.g., Chrome, Safari) */
+#gesturePlayhead::-webkit-slider-runnable-track {
+  background: transparent; /* Ensure the track is transparent */
+}
+
+/* Remove the rail (track) for Mozilla browsers (e.g., Firefox) */
+#gesturePlayhead::-moz-range-track {
+  background: transparent; /* Ensure the track is transparent */
+}
+
+/* Remove the rail (track) for Microsoft browsers (e.g., Edge, IE) */
+#gesturePlayhead::-ms-track {
+  background: transparent; /* Ensure the track is transparent */
+  border-color: transparent; /* Remove track border */
+  color: transparent; /* Remove track color */
+}
+
+   /* Style the rectangular thumb for WebKit browsers */
+#gesturePlayhead::-webkit-slider-thumb {
+    appearance: none; /* Remove default styles */
+    -webkit-appearance: none; /* Safari-specific */
+    background: #007bff; /* Thumb color */
+    width: 8px; /* Thumb width */
+    height: 20px; /* Thumb height */
+    border-radius: 2px; /* Slight rounding for rectangle */
+    cursor: pointer; /* Change cursor on hover */
+}
+
+/* Style the rectangular thumb for Mozilla browsers */
+#gesturePlayhead::-moz-range-thumb {
+    background: #007bff;
+    width: 16px; /* Thumb width */
+    height: 8px; /* Thumb height */
+    border-radius: 2px; /* Slight rounding for rectangle */
+    cursor: pointer;
+}
+
+/* Style the rectangular thumb for Microsoft browsers */
+#gesturePlayhead::-ms-thumb {
+    background: #007bff;
+    width: 16px; /* Thumb width */
+    height: 8px; /* Thumb height */
+    border-radius: 2px; /* Slight rounding for rectangle */
+    cursor: pointer;
+}
+
+/* Highlight styling for the active list item */
+.is-active {
+  background-color: #23dbbf; /* Bulma's primary color */
+  color: white;
+  font-weight: bold;
+  border-radius: 4px; /* Optional: Adds rounded corners */
+  padding: 5px; /* Optional: Adds padding */
+}
+
+.table-active {
+  background-color: #ffeb3b !important; /* Yellow highlight */
+  color: #000 !important; /* Optional: Ensure text color is readable */
+}
+
+#dynamicTableBody tr.table-set-step {
+  background-color: #ff833b !important; /* orange highlight */
+  color: #000 !important; /* Optional: Ensure text color is readable */
+}
+
+/* Highlight row (Bulma's `is-selected` class does this automatically) */
+.is-selected {
+  background-color: #f0f8ff; /* Light blue, part of Bulma's default styling */
+}
+
+/* Ensure parent columns and child elements take full height */
+.columns.is-fullheight {
+  height: 100vh; /* Full height of the viewport */
+}
+
+section.section.is-fullheight {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+/* Full-height helper for Bootstrap columns */
+.full-height {
+  height: 100vh; /* Ensure the container spans the full viewport height */
+}
+
+/* custom height */
+.h-60 {
+  height: 60%;
+}
+
+.h-40 {
+  height: 40%;
+}
+
+#snackbar {
+  visibility: hidden;
+  min-width: 250px;
+  margin-left: -125px;
+  background-color: #333;
+  color: #fff;
+  text-align: center;
+  border-radius: 4px;
+  padding: 12px;
+  position: fixed;
+  z-index: 9997;
+  left: 40%;
+  bottom: 30px;
+  font-size: 28px;
+  opacity: 0;
+  transition: opacity 0.4s ease, bottom 0.4s ease;
+}
+
+#snackbar.show {
+  visibility: visible;
+  opacity: 1;
+  bottom: 250px;
+}
+
+.workspaceButton {
+  display: inline-block;
+  padding: 0.6em 1.2em;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background-color: #0074c7;
+  border: none;
+  border-radius: 0.5em;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  text-align: center;
+  text-decoration: none;
+  user-select: none;
+}
+
+.workspaceButton:hover {
+  background-color: #5b9bc8;
+}
+
+.workspaceButton:active {
+  transform: scale(0.97);
+}
+
+
+.workspaceButton2 {
+  display: inline-block;
+  padding: 0.6em 1.2em;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background-color: #32b644;
+  border: none;
+  border-radius: 0.5em;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  text-align: center;
+  text-decoration: none;
+  user-select: none;
+}
+
+.workspaceButton2:hover {
+  background-color: #a1eb9c;
+}
+
+.workspaceButton2:active {
+  transform: scale(0.97);
+}
+
+
+
+canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 9999;
+}
+
+#playbackModal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* center the modal */
+    background-color: white;
+    border: 2px solid #444;
+    padding: 20px;
+    z-index: 10000; /* very high z-index */
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    display: none; /* hidden by default */
+    font-size: 30px;
+}
+
+#playbackModalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* semi-transparent black */
+    z-index: 9999;
+    display: none; /* hidden by default */
+}
+

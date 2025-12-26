@@ -10,17 +10,233 @@ import { WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { uuidv7 } from "uuidv7";
 
+import { fromByteArray, toByteArray } from 'base64-js';
 
 import osc from "osc";
 
 // oscQuery code:
 import { OSCQueryDiscovery } from "oscquery";
 
+import {username} from 'username';
+
+
+
+let userName = await username()
+console.log(userName);
+
 let wss;
 
 let namespaceState = {}
 
+let config = {
+    patchHistory: {
+        firstBranchName: "main"
+    }
+}
+ 
+//* AUTOMERGE IMPLEMENTATION
+let Automerge;
+let automergeRunning = false
+let syncState;
+let previousHash;
+let patchHistory;
+let patchHistoryIsDirty = false
+let docID = 'forkingPathsDoc'; // Unique identifier for the document
+let currentBranch = null
+let onChange; // my custom automerge callback for changes made to the doc
+
+let automergeDocuments = {
+    newClone: false,
+    newMerge: false,
+    current: {
+        doc: null
+    },
+    otherDocs: {
+
+    }
+}
+let docUpdated = false
+
+async function startAutomerge() {
+    automergeRunning = true
+    // Load Automerge asynchronously and assign it to the global variable
+    Automerge = await import('@automerge/automerge');
+
+    patchHistory = Automerge.from({
+        title: "forkingpaths",
+        forked_from_id: null, // used by the database to either determine this as the root of a tree of patch histories, or a fork from a stored history 
+        authors: [], // this will get added to as the doc is forked from the database
+        branches: {},
+        branchOrder: [],
+        docs: {},
+        head: {
+            hash: null,
+            branch: null
+        } ,
+        userSettings: {
+            focusNewBranch: true 
+        },
+        sequencer: {
+            bpm: 120,
+            ms: 500,
+            traversalMode: 'Sequential'
+        },
+        openSoundControl: { },
+        parameterSpace: { }
+    })
+
+    console.log("App not yet setup to load stored patchHistory. Starting fresh");
+    // await saveDocument(patchHistoryKey, Automerge.save(patchHistory));
+
+    syncState = Automerge.initSyncState()
+
+
+
+    // if patchHistory doesn't contain a document, create a new one
+    if (!patchHistory.docs[patchHistory.head.branch]) {
+
+        currentBranch = Automerge.init();
+        previousHash = null;
+
+        createNewPatchHistory();
+
+    }
+}
+
+function createNewPatchHistory(){
+
+
+    // delete the document in the indexedDB instance
+    // deleteDocument('patchHistory')
+
+    //! clear the sequencer
+    // sendMsgToHistoryApp({
+    //     appID: 'forkingPathsMain',
+    //     cmd: 'newPatchHistory'
+            
+    // })
+
+    // erase the patchHistory & send a blank DAG to client(s)
+    clearHistoryGraph()
+    
+    // init new patch history for Automerge
+    let patchHistoryJSON = {
+        title: "Forking Paths Patch History",
+        forked_from_id: null, // used by the database to either determine this as the root of a tree of patch histories, or a fork from a stored history 
+        authors: [], // this will get added to as the doc is forked from the database
+        branches: {},
+        branchOrder: [],
+        docs: {},
+        head: {
+            hash: null,
+            branch: config.patchHistory.firstBranchName
+        },
+        
+        userSettings: {
+            focusNewBranch:false 
+        },
+        sequencer: {
+            bpm: 120,
+            ms: 500,
+            traversalMode: 'Sequential'
+        },
+        openSoundControl: { },
+        parameterSpace: { }
+
+    }
+    // assign patch history to automerge
+    patchHistory = Automerge.from(patchHistoryJSON)
+    // clear the current automerge doc
+    currentBranch = Automerge.init();
+
+    let amMsg = makeChangeMessage(config.patchHistory.firstBranchName, `new history`)
+        
+    // Apply initial changes to the new document
+    currentBranch = Automerge.change(currentBranch, amMsg, (currentBranch) => {
+        currentBranch.title = config.patchHistory.firstBranchName;
+        currentBranch.parameterSpace = {},
+        currentBranch.openSoundControl = {}
+    }, onChange, `new history`);
+    
+
+    
+    let hash = Automerge.getHeads(currentBranch)[0]
+    previousHash = hash
+
+
+    let msg = 'initial_state'
+
+    patchHistory = Automerge.change(patchHistory, (patchHistory) => {
+        if(!patchHistory.branches[config.patchHistory.firstBranchName]){
+            patchHistory.branches[config.patchHistory.firstBranchName] = {}
+        }
+        patchHistory.branches[config.patchHistory.firstBranchName] = {
+            head: hash,
+            root: null,
+            parent: null,
+            // doc: currentBranch,
+            history: [ {hash: hash, parent: null, msg: msg} ] 
+        }
+        
+        // encode the doc as a binary object for efficiency
+        patchHistory.docs[config.patchHistory.firstBranchName] = Automerge.save(currentBranch)
+        patchHistory.head.branch = config.patchHistory.firstBranchName
+        patchHistory.head.hash = hash 
+        patchHistory.branchOrder.push(patchHistory.head.branch)
+        console.log('remember to encode the param state within the patchHistory initialization \n(see code at this line)')
+        
+    });     
+        
+    docUpdated = true
+    previousHash = patchHistory.head.hash
+    // send doc to history app
+    reDrawHistoryGraph()
+
+    // get a binary from the new patchHistory
+    const fullBinary = Automerge.save(patchHistory);
+    // send it to any connected peer(s)
+    let message = {
+        cmd: 'replacePatchHistory',
+        data: fromByteArray(fullBinary)  // base64 encoded or send as Uint8Array directly if channel supports it
+    }
+    // sync with peer(s)
+    // sendDataChannelMessage(message)
+    console.log('** see code line above for data channel sync implementation **')
+}
+
+function clearHistoryGraph(){
+    historyDAG_cy.elements().remove();
+    if(existingHistoryNodeIDs){
+        existingHistoryNodeIDs.clear()
+    }
+    historyDAG_cy.layout(graphLayouts[graphStyle]).run()
+}
+
+function reDrawHistoryGraph(){
+    patchHistoryIsDirty = true
+
+    wss.clients.forEach((client) => {
+        client.send(JSON.stringify({
+            appID: 'forkingPathsMain',
+            cmd: 'reDrawHistoryGraph',
+            data: patchHistory
+                
+        }))
+    });
+
+}
+
+function init(){
+    if(!automergeRunning){
+        startAutomerge()
+        
+    }
+    
+}
+
+init()
 //! when we want to have OSC/UDP back into the server for using oscQuery etc, uncomment this:
 // async function fetchRawOnly(ip, port) {
 //     const d = new OSCQueryDiscovery();
@@ -185,7 +401,7 @@ udpOut.on("open", () => {
 
 let sequencerStates = {}
 
-let patchHistory;
+// let patchHistory;
 let existingHistoryNodeIDs = new Set()
 
 let graphStyle = 'MANUAL_DAG'
@@ -433,7 +649,6 @@ wss.on('connection', (ws, req) => {
             case 'maxParamUpdate':
             case 'maxStateRecall':
             case 'maxCachedState':
-                // console.log(msg)
 
                 wss.clients.forEach((client) => {
                     client.send(JSON.stringify(msg))
@@ -509,18 +724,12 @@ wss.on('connection', (ws, req) => {
 
 
             case 'updateGraph':
-                patchHistory = msg.patchHistory
+                // patchHistory = msg.patchHistory
+                // console.log(patchHistory)
                 updateHistoryGraph(ws, patchHistory, msg.docHistoryGraphStyling)
             break
 
-            
-            case 'clearHistoryGraph':
-                historyDAG_cy.elements().remove();
-                if(existingHistoryNodeIDs){
-                    existingHistoryNodeIDs.clear()
-                }
-                historyDAG_cy.layout(graphLayouts[graphStyle]).run()
-            break
+        
 
             // case 'eraseRoomPatchHistory':
             //     // erase the patch history for all peers in this room
@@ -747,3 +956,19 @@ function updateHistoryGraph(ws, patchHistory, docHistoryGraphStyling){
 
 // });
 
+
+
+    //*
+    //*
+    //* UTILITY FUNCTIONS
+    //* reusable helper functions and utility code for debugging, logging, etc.
+    //*
+
+
+    function makeChangeMessage(branchName, msg){
+        let amMsg = JSON.stringify({
+            branch: branchName,
+            msg: msg
+        })
+        return amMsg
+    }
