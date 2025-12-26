@@ -90,7 +90,7 @@ let docUpdated = false
 
 async function startAutomerge() {
     automergeRunning = true
-    let storedHistory = fs.readFileSync(path.join(__dirname, 'storage/patchHistoryStore.automerge'))
+    let storedHistory = fs.readFileSync(path.join(__dirname, 'storage/patchHistoryStore.forkingpaths'))
 
     // Load Automerge asynchronously and assign it to the global variable
     Automerge = await import('@automerge/automerge');
@@ -120,14 +120,13 @@ async function startAutomerge() {
             openSoundControl: { },
             parameterSpace: { }
         })
+
+        savePatchHistory()
+
     } else {
         patchHistory = Automerge.load(storedHistory)
         
     }
-
-    console.log(patchHistory)
-    console.log("App not yet setup to load stored patchHistory. Starting fresh");
-    // await saveDocument(patchHistoryKey, Automerge.save(patchHistory));
 
     syncState = Automerge.initSyncState()
 
@@ -170,7 +169,8 @@ setInterval(async () => {
     // if(patchHistory && syncMessageDataChannel && syncMessageDataChannel.readyState === 'closed'){
     if(patchHistory && docUpdated){
         
-        fs.writeFileSync(path.join(__dirname, 'storage/patchHistoryStore.automerge'), Automerge.save(patchHistory))
+        savePatchHistory()
+
         // await saveDocument(docID, Automerge.save(currentBranch));
         // await dbStore.saveDocument(1, Automerge.save(patchHistory));
         docUpdated = false
@@ -339,7 +339,6 @@ async function loadVersion(targetHash, branch, fromPeer, fromPeerSequencer) {
     // Use `Automerge.view()` to view the state at this specific point in history
     const historicalView = Automerge.view(requestedDoc, [targetHash]);
 
-    console.log(historicalView)
 
     oscRecall(historicalView.openSoundControl)
 
@@ -1082,7 +1081,7 @@ wss.on('connection', (ws, req) => {
                 
                 patchHistoryClient = ws
                 console.log('New Connection: patchHistoryClient')
-                console.log(patchHistory)
+              
                 // send patch history to client
                 updateHistoryGraph()
             break
@@ -1093,7 +1092,7 @@ wss.on('connection', (ws, req) => {
 
                    //? keep this for now in case we can reuse it for other oscQuery-enabled programs
                 case 'namespaceState':
-                    console.log(msg.data)
+                    
                     // in this case, FP is receiving the full state of the OSC namespace in Max including the values. 
                     // i could be wrong, but i think this would always be the first changeNode in the history graph. maybe it needs to be a new changeNode type?
                     currentBranch = applyChange(currentBranch, (currentBranch) => {
@@ -1110,7 +1109,7 @@ wss.on('connection', (ws, req) => {
 
                 //? keep this for now in case we can reuse it for other oscQuery-enabled programs
                 case 'OSCmsg':
-                    // console.log(msg)
+                   
                     let AP = msg.data.address
                     let TTS = msg.data.args
                     
@@ -1132,7 +1131,7 @@ wss.on('connection', (ws, req) => {
                     }, onChange, `paramUpdate ${AP} = ${TTS}`);
                 break;
             case 'maxParamUpdate':
-                console.log(msg)
+                
                 currentBranch = applyChange(currentBranch, (currentBranch) => {
                     if(!currentBranch.parameterSpace){
                         currentBranch.parameterSpace = {}
@@ -1150,7 +1149,7 @@ wss.on('connection', (ws, req) => {
                     }
                 }, onChange, `paramUpdate ${msg.param} = ${msg.value} $external`);
 
-                // console.log(currentBranch.parameterSpace)
+                
 
             break
             case "maxBridgeIsReady":
@@ -1528,4 +1527,8 @@ function updateHistoryGraph(){
             cmd: 'maxStateRecall',
             data: paramState
         }))
+    }
+
+    function savePatchHistory(){
+        fs.writeFileSync(path.join(__dirname, 'storage/patchHistoryStore.forkingpaths'), Automerge.save(patchHistory))
     }
