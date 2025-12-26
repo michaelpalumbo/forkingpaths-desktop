@@ -313,6 +313,126 @@ onChange = () => {
 
 };
 
+async function loadVersion(targetHash, branch, fromPeer, fromPeerSequencer) {
+    // store the hash and branch for if a new peer joins
+    // newPeerHash = targetHash
+    // newPeerBranch = branch
+
+    // get the head from this branch
+    let head = patchHistory.branches[branch].head
+    // get the automerge doc associated with the requested hash
+    let requestedDoc = loadAutomergeDoc(branch)
+
+
+
+    // Use `Automerge.view()` to view the state at this specific point in history
+    const historicalView = Automerge.view(requestedDoc, [targetHash]);
+
+    console.log(historicalView)
+
+    oscRecall(historicalView.openSoundControl)
+
+    // recall max patch state
+    maxStateRecall(historicalView.parameterSpace)
+
+    // ⬇️ Optional sync logic for collaboration mode
+    // const versionSyncMode = localStorage.getItem('syncMode') || 'shared';
+
+    // if (versionSyncMode === 'shared') {
+    //     // Propose to replace current state for both peers
+    //     requestMergeOrReplace('replace', Automerge.save(historicalView));
+    //     return; // Stop here — the update will happen after peer accepts
+    // }
+    
+    // Check if we're on the head; reset clone if true (so we don't trigger opening a new branch with changes made to head)
+    // compare the point in history we want (targetHash) against the head of its associated branch (head)
+    if (head === targetHash){
+
+        // no need to create a new branch if the user makes changes after this operation
+        automergeDocuments.newClone = false
+
+        oscRecall(historicalView.openSoundControl)
+
+        // recall max patch state
+        maxStateRecall(historicalView.parameterSpace)
+        // update patchHistory to set the current head and change hash
+        patchHistory = Automerge.change(patchHistory, (patchHistory) => {
+            // store the HEAD info (the most recent HEAD and branch that were viewed or operated on)
+            patchHistory.head.hash = targetHash
+            patchHistory.head.branch = branch
+        });
+        // set global var for easy checking
+        automergeDocuments.current = {
+            doc: requestedDoc
+        }
+
+        
+    } 
+
+    // this is necessary for loading a hash on another branch that ISN'T the head
+    else if (branch != patchHistory.head.branch) {
+
+        oscRecall(historicalView.openSoundControl)
+
+        // recall max patch state
+        maxStateRecall(historicalView.parameterSpace)
+
+        // set global var for easy checking
+        automergeDocuments.current = {
+            doc: requestedDoc
+        }
+        // update patchHistory to set the current head and change hash
+        patchHistory = Automerge.change(patchHistory, (patchHistory) => {
+            // store the HEAD info (the most recent HEAD and branch that were viewed or operated on)
+            patchHistory.head.hash = targetHash
+            patchHistory.head.branch = branch
+        });
+        // set newClone to true
+        automergeDocuments.newClone = true
+
+
+
+    }
+    // the selected hash belongs to the current branch
+    else {
+        oscRecall(historicalView.openSoundControl)
+
+        // recall max patch state
+        maxStateRecall(historicalView.parameterSpace)
+        // create a clone of the branch in case the player begins making changes
+        let clonedDoc = Automerge.clone(historicalView)
+        // store it
+        automergeDocuments.current = {
+            doc: clonedDoc
+        }
+        // set newClone to true
+        automergeDocuments.newClone = true
+
+        // update patchHistory to set the current head and change hash
+        patchHistory = Automerge.change(patchHistory, (patchHistory) => {
+            // store the HEAD info (the most recent HEAD and branch that were viewed or operated on)
+            patchHistory.head.hash = targetHash
+            patchHistory.head.branch = branch
+        });
+    }
+
+    
+    // ⬇️ Optional sync/permission handling AFTER local load
+    /*
+    const recallMode = getVersionRecallMode();
+    // ensure that loadVersion calls from the peer don't make past this point, becuase otherwise they'd send it back and forth forever 
+    if (recallMode === 'openLoadVersion' && !fromPeer && !fromPeerSequencer) {
+        // console.log('openVersionRecall')
+        openVersionRecall(targetHash, branch);
+    }
+
+    if (recallMode === 'requestOpenLoadVersion'  && !fromPeer) {
+        // requestVersionRecallWithPermission(currentBranch, Automerge.getHeads(currentBranch)[0], patchHistory.head.branch);
+        console.warn('not set up yet')
+    }
+    */
+} 
+
 function sendSyncMessage() {
     // todo: if we want to setup p2p, uncomment this
     /*
@@ -856,7 +976,6 @@ const server = createServer(app, (req, res)=>{
 wss = new WebSocketServer({ noServer: true });
 
 server.on('upgrade', (request, socket, head) => {
-    console.log('🚀 WebSocket upgrade request received');
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('connection', ws, request);
     });
@@ -866,12 +985,13 @@ server.on('upgrade', (request, socket, head) => {
 let numClients = 0
 
 let patchHistoryClient
+let maxMspClient
 // Handle client connections
 wss.on('connection', (ws, req) => {
     numClients++
 
-    const clientIp = req.socket.remoteAddress;
-    console.log(`New connection from ${clientIp}`);
+    // const clientIp = req.socket.remoteAddress;
+  
     console.log(`Number of clients: ${numClients}`)
     
     // Handle messages received from clients
@@ -948,6 +1068,10 @@ wss.on('connection', (ws, req) => {
                 // console.log(currentBranch.parameterSpace)
 
             break
+            case "maxBridgeIsReady":
+                maxMspClient = ws
+                console.log('New Connection: maxMspClient')
+            break
             case 'maxCachedState':
 
                 // console.log(msg.data)
@@ -984,8 +1108,13 @@ wss.on('connection', (ws, req) => {
                 
             break
 
+            case 'loadVersion':
+                loadVersion(msg.data.hash, msg.data.branch, msg.data.gestureDataPoint, msg.data.fromSequencer)
+            break
+
+
             case 'newPatchHistory':
-                console.log('snared', msg.cmd)
+                
                 createNewPatchHistory()
             //todo: get the namespace state from max patch then send here:
                     //             wss.clients.forEach((client) => {
@@ -1019,6 +1148,7 @@ wss.on('connection', (ws, req) => {
             case 'historyWindowReady':
                 
                 patchHistoryClient = ws
+                console.log('New Connection: patchHistoryClient')
                 // sendMsgToHistoryApp({
                 //     appID: 'forkingPathsMain',
                 //     cmd: 'reDrawHistoryGraph',
@@ -1329,4 +1459,23 @@ function updateHistoryGraph(ws, patchHistory, docHistoryGraphStyling){
             });
         }
 
+    }
+
+    function loadAutomergeDoc(branch){
+        if (!patchHistory.docs[branch]) throw new Error(`Branchname ${branch} not found`);
+        return Automerge.load(patchHistory.docs[branch]); // Load the document
+    }
+
+        function oscRecall(oscSpace){
+        // ws.send(JSON.stringify({
+        //     cmd: 'oscRecall',
+        //     data: oscSpace
+        // }))
+    }
+
+    function maxStateRecall(paramState){
+        maxMspClient.send(JSON.stringify({
+            cmd: 'maxStateRecall',
+            data: paramState
+        }))
     }
