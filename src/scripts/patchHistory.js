@@ -2,7 +2,7 @@ import dagre from 'cytoscape-dagre';
 
 import * as Tone from "tone";
 import { uuidv7 } from "uuidv7";
-import { WebMidi } from "webmidi"; // skip this line if you're using a script tag
+// import { WebMidi } from "webmidi"; // skip this line if you're using a script tag
 import modules from '../modules/modules.json' assert { type: 'json'}
 import { marked } from 'marked'
 // import { config } from '../../config/forkingPathsConfig.js';
@@ -277,52 +277,52 @@ window.addEventListener("load", () => {
    
 
 
-    WebMidi.enable()
-    .then(() => {
-        midiInput = WebMidi.inputs[0]; // select your MIDI device
+    // WebMidi.enable()
+    // .then(() => {
+    //     midiInput = WebMidi.inputs[0]; // select your MIDI device
   
-      if (!midiInput) {
-        console.log("No MIDI input devices found.");
-        return;
-      }
+    //   if (!midiInput) {
+    //     console.log("No MIDI input devices found.");
+    //     return;
+    //   }
   
-      // Log available controls
-    //   console.log("Listening to MIDI device:", midiInput.name);
+    //   // Log available controls
+    // //   console.log("Listening to MIDI device:", midiInput.name);
   
-      // Listen to control change (knobs/faders usually send these)
-      midiInput.addListener("controlchange", (e) => {
-        console.log(`Control Change on CC#${e.controller.number}: ${e.value}`);
-        // cycle through graph
-        if (e.controller.number === 8) {
+    //   // Listen to control change (knobs/faders usually send these)
+    //   midiInput.addListener("controlchange", (e) => {
+    //     console.log(`Control Change on CC#${e.controller.number}: ${e.value}`);
+    //     // cycle through graph
+    //     if (e.controller.number === 8) {
             
-            if(!midiValues.controllers[e.controller.number]){
-                midiValues.controllers[e.controller.number] = {value: null}
-            }
+    //         if(!midiValues.controllers[e.controller.number]){
+    //             midiValues.controllers[e.controller.number] = {value: null}
+    //         }
 
-            const scaled = scaleMidiValue(e.rawValue, 0, 127, 0, historyGraphNodesArray.length - 1);
-            if(midiValues.controllers[e.controller.number].value != scaled){
+    //         const scaled = scaleMidiValue(e.rawValue, 0, 127, 0, historyGraphNodesArray.length - 1);
+    //         if(midiValues.controllers[e.controller.number].value != scaled){
 
-                // console.log(historyGraphNodesArray[scaled]); // ~251.97
-                let n = historyGraphNodesArray[scaled].data
-                loadVersion(n.id, n.branch)
+    //             // console.log(historyGraphNodesArray[scaled]); // ~251.97
+    //             let n = historyGraphNodesArray[scaled].data
+    //             loadVersion(n.id, n.branch)
 
-                let historyNode = historyDAG_cy.getElementById(n.id)
-                highlightNode(historyNode)
-
-
-                midiValues.controllers[e.controller.number].value = scaled
+    //             let historyNode = historyDAG_cy.getElementById(n.id)
+    //             highlightNode(historyNode)
 
 
-            }
+    //             midiValues.controllers[e.controller.number].value = scaled
 
-        }
-      });
-    })
-    .catch((err) => console.error("WebMidi could not be enabled:", err));
 
-    function scaleMidiValue(input, inMin, inMax, outMin, outMax) {
-        return Math.round(((input - inMin) / (inMax - inMin)) * (outMax - outMin) + outMin);
-    }
+    //         }
+
+    //     }
+    //   });
+    // })
+    // .catch((err) => console.error("WebMidi could not be enabled:", err));
+
+    // function scaleMidiValue(input, inMin, inMax, outMin, outMax) {
+    //     return Math.round(((input - inMin) / (inMax - inMin)) * (outMax - outMin) + outMin);
+    // }
 
 });
 

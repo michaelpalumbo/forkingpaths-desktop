@@ -547,9 +547,10 @@ function sendSyncMessage() {
 
 }
 
-function createNewPatchHistory(data = {}){
+let emptyHistory = false
+function createNewPatchHistory(data = false){
 
-
+    console.log(data)
     // delete the document in the indexedDB instance
     // deleteDocument('patchHistory')
 
@@ -593,58 +594,80 @@ function createNewPatchHistory(data = {}){
     // clear the current automerge doc
     currentBranch = Automerge.init();
 
-    let amMsg = makeChangeMessage(config.patchHistory.firstBranchName, `new history`)
+    if(data){
+
+        let amMsg = makeChangeMessage(config.patchHistory.firstBranchName, `new history`)
+            
+        // Apply initial changes to the new document
+        currentBranch = Automerge.change(currentBranch, amMsg, (currentBranch) => {
+            currentBranch.title = config.patchHistory.firstBranchName;
+            currentBranch.parameterSpace = data,
+            currentBranch.openSoundControl = {}
+        }, onChange, `blank_patch`);
         
-    // Apply initial changes to the new document
-    currentBranch = Automerge.change(currentBranch, amMsg, (currentBranch) => {
-        currentBranch.title = config.patchHistory.firstBranchName;
-        currentBranch.parameterSpace = data,
-        currentBranch.openSoundControl = {}
-    }, onChange, `blank_patch`);
-    
 
-    
-    let hash = Automerge.getHeads(currentBranch)[0]
-    previousHash = hash
-
-
-    let msg = 'initial_state'
-
-    patchHistory = Automerge.change(patchHistory, (patchHistory) => {
-        if(!patchHistory.branches[config.patchHistory.firstBranchName]){
-            patchHistory.branches[config.patchHistory.firstBranchName] = {}
-        }
-        patchHistory.branches[config.patchHistory.firstBranchName] = {
-            head: hash,
-            root: null,
-            parent: null,
-            // doc: currentBranch,
-            history: [ {hash: hash, parent: null, msg: msg} ] 
-        }
         
-        // encode the doc as a binary object for efficiency
-        patchHistory.docs[config.patchHistory.firstBranchName] = Automerge.save(currentBranch)
-        patchHistory.head.branch = config.patchHistory.firstBranchName
-        patchHistory.head.hash = hash 
-        patchHistory.branchOrder.push(patchHistory.head.branch)
-        console.log('remember to encode the param state within the patchHistory initialization \n(see code at this line)')
-        
-    });     
-        
-    docUpdated = true
-    previousHash = patchHistory.head.hash
+        let hash = Automerge.getHeads(currentBranch)[0]
+        previousHash = hash
 
-    patchHistoryIsDirty = true
-    // send doc to history app
-    updateHistoryGraph()
+
+        let msg = 'initial_state'
+
+        patchHistory = Automerge.change(patchHistory, (patchHistory) => {
+            if(!patchHistory.branches[config.patchHistory.firstBranchName]){
+                patchHistory.branches[config.patchHistory.firstBranchName] = {}
+            }
+            patchHistory.branches[config.patchHistory.firstBranchName] = {
+                head: hash,
+                root: null,
+                parent: null,
+                // doc: currentBranch,
+                history: [ {hash: hash, parent: null, msg: msg} ] 
+            }
+            
+            // encode the doc as a binary object for efficiency
+            patchHistory.docs[config.patchHistory.firstBranchName] = Automerge.save(currentBranch)
+            patchHistory.head.branch = config.patchHistory.firstBranchName
+            patchHistory.head.hash = hash 
+            patchHistory.branchOrder.push(patchHistory.head.branch)
+            console.log('remember to encode the param state within the patchHistory initialization \n(see code at this line)')
+            
+            docUpdated = true
+            previousHash = patchHistory.head.hash
+
+            patchHistoryIsDirty = true
+            // send doc to history app
+            updateHistoryGraph()
+        });     
+            
+
+    } else {
+        
+        // createNewPatchHistory was called while no external client was connected. So just clear the history and display an empty graph in the history app
+        patchHistory = Automerge.change(patchHistory, (patchHistory) => {
+            if(!patchHistory.branches[config.patchHistory.firstBranchName]){
+                patchHistory.branches[config.patchHistory.firstBranchName] = {}
+            }
+            patchHistory.branches[config.patchHistory.firstBranchName] = { }
+            
+            docUpdated = true
+            // previousHash = patchHistory.head.hash
+            emptyHistory = true
+            // patchHistoryIsDirty = true
+            // send doc to history app
+            updateHistoryGraph()
+        });  
+        
+        
+    }
 
     // get a binary from the new patchHistory
-    const fullBinary = Automerge.save(patchHistory);
-    // send it to any connected peer(s)
-    let message = {
-        cmd: 'replacePatchHistory',
-        data: fromByteArray(fullBinary)  // base64 encoded or send as Uint8Array directly if channel supports it
-    }
+    // const fullBinary = Automerge.save(patchHistory);
+    // // send it to any connected peer(s)
+    // let message = {
+    //     cmd: 'replacePatchHistory',
+    //     data: fromByteArray(fullBinary)  // base64 encoded or send as Uint8Array directly if channel supports it
+    // }
     // sync with peer(s)
     // sendDataChannelMessage(message)
     console.log('** see code line above for data channel sync implementation **')
@@ -1148,13 +1171,22 @@ wss.on('connection', (ws, req) => {
             case "maxBridgeIsReady":
                 maxMspClient = ws
                 console.log('New Connection: maxMspClient')
+
+                // get the cached state
+                console.log(patchHistory)
+                if(!patchHistory.head.hash){
+                    maxMspClient.send(JSON.stringify({
+                        cmd: 'getParamStates'
+                    }))
+                }
+                
             break
             case 'maxCachedState':
 
                 // console.log(msg.data)
                 // in this case, FP is receiving the full state of the OSC namespace in Max including the values. 
                 // i could be wrong, but i think this would always be the first changeNode in the history graph. maybe it needs to be a new changeNode type?
-
+             
                 createNewPatchHistory(msg.data)
 
                 // currentBranch = applyChange(currentBranch, (currentBranch) => {
@@ -1202,6 +1234,8 @@ wss.on('connection', (ws, req) => {
                 }))
             } else {
                 console.log('\n\ntodo: in this case, the maxClient isnt connected/open yet\nso, need to just clear the patch history AND inform history client that no external clients are connected yet')
+
+                createNewPatchHistory()
             }
             
 
@@ -1400,6 +1434,13 @@ wss.on('connection', (ws, req) => {
 
     // Handle client disconnection
     ws.on('close', () => {
+
+        if(ws === maxMspClient){
+            maxMspClient = false
+        }
+        if(ws === patchHistoryClient){
+            patchHistoryClient = false
+        }
         console.log('Client disconnected');
         numClients--
         console.log('number of clients:', numClients)
@@ -1572,7 +1613,9 @@ function updateHistoryGraph(){
     }
 
     function maxStateRecall(paramState){
-   
+        if(!maxMspClient){
+            return
+        }
         maxMspClient.send(JSON.stringify({
             cmd: 'maxStateRecall',
             data: paramState
