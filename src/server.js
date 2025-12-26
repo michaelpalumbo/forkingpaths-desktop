@@ -90,32 +90,42 @@ let docUpdated = false
 
 async function startAutomerge() {
     automergeRunning = true
+    let storedHistory = fs.readFileSync(path.join(__dirname, 'storage/patchHistoryStore.automerge'))
+
     // Load Automerge asynchronously and assign it to the global variable
     Automerge = await import('@automerge/automerge');
 
-    patchHistory = Automerge.from({
-        title: "forkingpaths",
-        forked_from_id: null, // used by the database to either determine this as the root of a tree of patch histories, or a fork from a stored history 
-        authors: [], // this will get added to as the doc is forked from the database
-        branches: {},
-        branchOrder: [],
-        docs: {},
-        head: {
-            hash: null,
-            branch: null
-        } ,
-        userSettings: {
-            focusNewBranch: true 
-        },
-        sequencer: {
-            bpm: 120,
-            ms: 500,
-            traversalMode: 'Sequential'
-        },
-        openSoundControl: { },
-        parameterSpace: { }
-    })
+    // if no prior history, create new one
+    if(!storedHistory){
+            
+        patchHistory = Automerge.from({
+            title: "forkingpaths",
+            forked_from_id: null, // used by the database to either determine this as the root of a tree of patch histories, or a fork from a stored history 
+            authors: [], // this will get added to as the doc is forked from the database
+            branches: {},
+            branchOrder: [],
+            docs: {},
+            head: {
+                hash: null,
+                branch: null
+            } ,
+            userSettings: {
+                focusNewBranch: true 
+            },
+            sequencer: {
+                bpm: 120,
+                ms: 500,
+                traversalMode: 'Sequential'
+            },
+            openSoundControl: { },
+            parameterSpace: { }
+        })
+    } else {
+        patchHistory = Automerge.load(storedHistory)
+        
+    }
 
+    console.log(patchHistory)
     console.log("App not yet setup to load stored patchHistory. Starting fresh");
     // await saveDocument(patchHistoryKey, Automerge.save(patchHistory));
 
@@ -148,7 +158,7 @@ async function startAutomerge() {
             
             patchHistoryIsDirty = true
             // send doc to history app
-            updateHistoryGraph(patchHistoryClient, patchHistory, config.docHistoryGraphStyling)
+            updateHistoryGraph()
 
         }, 1000);
     }
@@ -160,7 +170,7 @@ setInterval(async () => {
     // if(patchHistory && syncMessageDataChannel && syncMessageDataChannel.readyState === 'closed'){
     if(patchHistory && docUpdated){
         
-        fs.writeFileSync(path.join(__dirname, 'storage/patchHistoryStore.json'), JSON.stringify(Automerge.save(patchHistory), null, 2))
+        fs.writeFileSync(path.join(__dirname, 'storage/patchHistoryStore.automerge'), Automerge.save(patchHistory))
         // await saveDocument(docID, Automerge.save(currentBranch));
         // await dbStore.saveDocument(1, Automerge.save(patchHistory));
         docUpdated = false
@@ -309,7 +319,7 @@ onChange = () => {
 
     patchHistoryIsDirty = true
     // update the historyGraph
-    updateHistoryGraph(patchHistoryClient, patchHistory, config.docHistoryGraphStyling)
+    updateHistoryGraph()
 
 
 };
@@ -627,7 +637,7 @@ function createNewPatchHistory(){
 
     patchHistoryIsDirty = true
     // send doc to history app
-    updateHistoryGraph(patchHistoryClient, patchHistory, config.docHistoryGraphStyling)
+    updateHistoryGraph()
 
     // get a binary from the new patchHistory
     const fullBinary = Automerge.save(patchHistory);
@@ -1072,10 +1082,9 @@ wss.on('connection', (ws, req) => {
                 
                 patchHistoryClient = ws
                 console.log('New Connection: patchHistoryClient')
-
+                console.log(patchHistory)
                 // send patch history to client
-                
-                updateHistoryGraph(patchHistoryClient, patchHistory, config.docHistoryGraphStyling)
+                updateHistoryGraph()
             break
 
             case 'maxStateRecall':
